@@ -183,6 +183,19 @@ import {
   type PostSpecificationPayload,
 } from './hooks/epic-hooks.js';
 
+// Epic Work Hooks (for hive-mind integration)
+import {
+  registerEpicWorkHooks,
+  unregisterEpicWorkHooks,
+  triggerWorkComplete,
+  PreWorkHook,
+  PostWorkHook,
+  WorkFailedHook,
+  type PreWorkPayload,
+  type PostWorkPayload,
+  type WorkFailedPayload,
+} from './hooks/epic-work-hooks.js';
+
 // ===== TEAMMATE MANAGER TYPES =====
 
 /**
@@ -1276,6 +1289,25 @@ export type {
   PreEpicPayload,
   PostEpicPhasePayload,
   PostSpecificationPayload,
+};
+
+/**
+ * Epic Work Hooks - Hooks for hive-mind agent work lifecycle
+ * Handles issue claiming, work completion, and failure handling
+ */
+export {
+  registerEpicWorkHooks,
+  unregisterEpicWorkHooks,
+  triggerWorkComplete,
+  PreWorkHook,
+  PostWorkHook,
+  WorkFailedHook,
+};
+
+export type {
+  PreWorkPayload,
+  PostWorkPayload,
+  WorkFailedPayload,
 };
 
 /**

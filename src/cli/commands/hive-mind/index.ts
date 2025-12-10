@@ -15,6 +15,7 @@ import { stopCommand } from './stop.js';
 import { pauseCommand } from './pause.js';
 import { resumeCommand } from './resume.js';
 import { psCommand } from './ps.js';
+import { epicCommand } from './epic.js';
 
 export const hiveMindCommand = new Command('hive-mind')
   .description('Hive Mind collective intelligence swarm management')
@@ -26,7 +27,8 @@ export const hiveMindCommand = new Command('hive-mind')
   .addCommand(stopCommand)
   .addCommand(pauseCommand)
   .addCommand(resumeCommand)
-  .addCommand(psCommand);
+  .addCommand(psCommand)
+  .addCommand(epicCommand);
 
 // Export individual commands for testing
 export {
@@ -39,4 +41,5 @@ export {
   pauseCommand,
   resumeCommand,
   psCommand,
+  epicCommand,
 };
