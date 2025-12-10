@@ -1307,6 +1307,59 @@ export type {
   ProjectSyncState,
 };
 
+/**
+ * GitHub Octokit Client - Direct GitHub API access
+ */
+export {
+  OctokitClient,
+  createOctokitClient,
+} from './github/octokit-client.js';
+
+export type {
+  GitHubClientConfig,
+  ProjectV2,
+  IssueData,
+  CreateProjectResult,
+  CreateIssueResult,
+} from './github/octokit-client.js';
+
+/**
+ * AgentDB Epic Memory - Vector-enhanced memory with semantic search
+ */
+export {
+  AgentDBEpicMemory,
+  createAgentDBEpicMemory,
+  VECTOR_NAMESPACES,
+} from './memory/agentdb-epic-memory.js';
+
+export type {
+  VectorSearchResult,
+  AgentProfile as VectorAgentProfile,
+  PerformanceMetric,
+  TaskEmbedding,
+  SimilarityMatch,
+  AgentDBEpicConfig,
+} from './memory/agentdb-epic-memory.js';
+
+/**
+ * Hive-Mind GitHub Orchestrator - Unified project lifecycle management
+ */
+export {
+  HiveMindGitHubOrchestrator,
+  createHiveMindOrchestrator,
+  SPARC_PHASES,
+  DEFAULT_PROJECT_STATUSES,
+} from './integration/hive-mind-github.js';
+
+export type {
+  HiveMindConfig,
+  SparcPhase as HiveMindSparcPhase,
+  EpicPlan,
+  TaskPlan,
+  CreatedEpic,
+  CreatedTask,
+} from './integration/hive-mind-github.js';
+
 // Track registration state
 let epicCommandsRegistered = false;
 
