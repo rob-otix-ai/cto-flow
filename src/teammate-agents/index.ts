@@ -196,6 +196,19 @@ import {
   type WorkFailedPayload,
 } from './hooks/epic-work-hooks.js';
 
+// GitHub Webhook Server (for real-time issue assignment detection)
+import {
+  GitHubWebhookServer,
+  createWebhookServer,
+  startWebhookServer,
+  getWebhookSetupInstructions,
+  type WebhookConfig,
+  type GitHubWebhookPayload,
+  type AssignmentEvent,
+  type IssueClosedEvent,
+  type WebhookEvent,
+} from './github/webhook-server.js';
+
 // ===== TEAMMATE MANAGER TYPES =====
 
 /**
@@ -1391,6 +1404,25 @@ export type {
   CreatedEpic,
   CreatedTask,
 } from './integration/hive-mind-github.js';
+
+/**
+ * GitHub Webhook Server - Real-time issue assignment detection
+ * Listens for GitHub webhook events to detect agent assignments
+ */
+export {
+  GitHubWebhookServer,
+  createWebhookServer,
+  startWebhookServer,
+  getWebhookSetupInstructions,
+};
+
+export type {
+  WebhookConfig,
+  GitHubWebhookPayload,
+  AssignmentEvent,
+  IssueClosedEvent,
+  WebhookEvent,
+};
 
 // Track registration state
 let epicCommandsRegistered = false;

@@ -4,28 +4,77 @@
  *
  * CLI commands for managing epic issues with hive-mind coordination:
  * - fetch: Pull tasks from GitHub epic issues for agents to work on
- * - watch: Monitor epic issues for new assignments
+ * - watch: Monitor epic issues for new assignments (webhook or polling)
  * - complete: Mark an issue as complete when work is done
  * - status: Get status of epic tasks
+ * - unassigned: List tasks waiting for assignment
+ *
+ * KEY BEHAVIOR: Agents WAIT for explicit GitHub assignment before picking up work.
+ * This allows human review of task assignments before work begins.
  */
 
 import { Command } from '../../commander-fix.js';
 import { HiveMindGitHubOrchestrator, createHiveMindOrchestrator, CreatedTask } from '../../../teammate-agents/integration/hive-mind-github.js';
+import { GitHubWebhookServer, createWebhookServer, getWebhookSetupInstructions, AssignmentEvent } from '../../../teammate-agents/github/webhook-server.js';
 import { HiveMind } from '../../../hive-mind/core/HiveMind.js';
 import { DatabaseManager } from '../../../hive-mind/core/DatabaseManager.js';
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+async function getHiveMind(): Promise<HiveMind | null> {
+  try {
+    const db = await DatabaseManager.getInstance();
+    const activeSwarm = await db.getActiveSwarm();
+    if (activeSwarm) {
+      return await HiveMind.load(activeSwarm.id);
+    }
+  } catch (error) {
+    // Swarm not initialized
+  }
+  return null;
+}
+
+async function startWorkOnTask(
+  hiveMind: HiveMind,
+  orchestrator: HiveMindGitHubOrchestrator,
+  epic: { epicId: string },
+  task: CreatedTask
+): Promise<void> {
+  // Submit task to hive-mind
+  await hiveMind.submitTask({
+    description: `[Epic #${task.issueNumber}] ${task.title}`,
+    priority: 'high',
+    strategy: 'adaptive',
+    requiredCapabilities: task.assignedAgent?.skills || [],
+    metadata: {
+      epicId: epic.epicId,
+      issueNumber: task.issueNumber,
+      issueUrl: task.issueUrl,
+      phase: task.phase,
+      taskId: task.taskId,
+      githubAssignees: task.githubAssignees,
+    },
+  });
+
+  // Update task status in GitHub
+  await orchestrator.updateTaskStatus(epic.epicId, task.taskId, 'In Progress');
+}
 
 // ============================================================================
 // Epic Fetch Command
 // ============================================================================
 
 export const epicFetchCommand = new Command('fetch')
-  .description('Fetch tasks from GitHub epic issues for agents to work on')
+  .description('Fetch ASSIGNED tasks from GitHub epic issues for agents to work on')
   .option('--epic <epicId>', 'Epic ID to fetch tasks from')
   .option('--repo <repo>', 'Repository name (owner/repo format)')
   .option('--phase <phase>', 'Filter by SPARC phase (Specification, Architecture, Refinement, Completion)')
-  .option('--agent-type <type>', 'Filter by agent type (coder, tester, reviewer, etc.)')
+  .option('--assignee <username>', 'Filter by GitHub assignee username')
+  .option('--include-unassigned', 'Also show unassigned tasks (default: only assigned)')
   .option('--limit <n>', 'Maximum number of tasks to fetch', '5')
-  .option('--assign', 'Automatically assign fetched tasks to available agents')
+  .option('--start-work', 'Automatically start working on fetched tasks')
   .option('--json', 'Output in JSON format')
   .action(async (options) => {
     try {
@@ -74,10 +123,11 @@ export const epicFetchCommand = new Command('fetch')
       // Refresh task statuses from GitHub
       await orchestrator.refreshTaskStatuses(epic.epicId);
 
-      // Get ready tasks
+      // Get ready tasks - DEFAULT: only assigned tasks
       const readyTasks = orchestrator.getReadyTasks(epic.epicId, {
         phase: options.phase,
-        agentType: options.agentType,
+        assignee: options.assignee,
+        requireAssignment: !options.includeUnassigned,
         includeDependencyCheck: true,
       });
 
@@ -85,8 +135,19 @@ export const epicFetchCommand = new Command('fetch')
       const tasksToFetch = readyTasks.slice(0, limit);
 
       if (tasksToFetch.length === 0) {
-        console.log('No tasks available for pickup.\n');
-        console.log('Task Status Summary:');
+        console.log('No ASSIGNED tasks available for pickup.\n');
+
+        // Show unassigned tasks waiting for review
+        const unassigned = orchestrator.getUnassignedTasks(epic.epicId);
+        if (unassigned.length > 0) {
+          console.log(`⏳ ${unassigned.length} task(s) waiting for assignment:`);
+          for (const task of unassigned.slice(0, 5)) {
+            console.log(`   #${task.issueNumber}: ${task.title} (${task.phase})`);
+          }
+          console.log('\nAssign tasks on GitHub to enable pickup.');
+        }
+
+        console.log('\nTask Status Summary:');
         const summary = orchestrator.getTaskStatusSummary(epic.epicId);
         console.log(`  Backlog: ${summary.backlog}`);
         console.log(`  Ready: ${summary.ready}`);
@@ -100,14 +161,15 @@ export const epicFetchCommand = new Command('fetch')
       if (options.json) {
         console.log(JSON.stringify(tasksToFetch, null, 2));
       } else {
-        console.log(`Found ${tasksToFetch.length} tasks ready for pickup:\n`);
+        console.log(`Found ${tasksToFetch.length} ASSIGNED task(s) ready for pickup:\n`);
 
         for (const task of tasksToFetch) {
           console.log(`  📋 #${task.issueNumber}: ${task.title}`);
           console.log(`     Phase: ${task.phase}`);
           console.log(`     Status: ${task.status}`);
+          console.log(`     Assignees: ${task.githubAssignees?.join(', ') || 'none'}`);
           if (task.assignedAgent) {
-            console.log(`     Agent: ${task.assignedAgent.name} (${task.assignedAgent.type})`);
+            console.log(`     Recommended Agent: ${task.assignedAgent.name} (${task.assignedAgent.type})`);
             if (task.assignmentScore) {
               console.log(`     Match Score: ${task.assignmentScore.toFixed(1)}%`);
             }
@@ -117,59 +179,20 @@ export const epicFetchCommand = new Command('fetch')
         }
       }
 
-      // Auto-assign to hive-mind agents if requested
-      if (options.assign) {
-        console.log('Assigning tasks to hive-mind agents...\n');
+      // Start work if requested
+      if (options.startWork) {
+        console.log('Starting work on assigned tasks...\n');
 
-        const db = await DatabaseManager.getInstance();
-        const activeSwarm = await db.getActiveSwarm();
+        const hiveMind = await getHiveMind();
 
-        if (!activeSwarm) {
+        if (!hiveMind) {
           console.log('No active hive-mind swarm. Run "npx claude-flow hive-mind init" first.');
         } else {
-          const hiveMind = await HiveMind.load(activeSwarm.id);
-          const agents = await hiveMind.getAgents();
-
           for (const task of tasksToFetch) {
-            // Find matching agent by type
-            const matchingAgent = agents.find(a =>
-              a.type === task.assignedAgent?.type ||
-              a.capabilities.some(cap =>
-                task.assignedAgent?.skills?.includes(cap)
-              )
-            );
-
-            if (matchingAgent) {
-              // Submit task to hive-mind
-              await hiveMind.submitTask({
-                description: `[Epic #${task.issueNumber}] ${task.title}`,
-                priority: 'high',
-                strategy: 'adaptive',
-                requiredCapabilities: task.assignedAgent?.skills || [],
-                metadata: {
-                  epicId: epic.epicId,
-                  issueNumber: task.issueNumber,
-                  issueUrl: task.issueUrl,
-                  phase: task.phase,
-                  taskId: task.taskId,
-                },
-              });
-
-              // Update task status in GitHub
-              await orchestrator.updateTaskStatus(epic.epicId, task.taskId, 'In Progress');
-
-              console.log(`  ✓ Assigned #${task.issueNumber} to ${matchingAgent.name}`);
-            }
+            await startWorkOnTask(hiveMind, orchestrator, epic, task);
+            console.log(`  ✓ Started work on #${task.issueNumber}`);
           }
         }
-      }
-
-      // Output next task recommendation
-      const nextTask = orchestrator.getNextTask(epic.epicId);
-      if (nextTask) {
-        console.log(`\n🎯 Recommended next task: #${nextTask.issueNumber} - ${nextTask.title}`);
-        console.log(`   Phase: ${nextTask.phase}`);
-        console.log(`   URL: ${nextTask.issueUrl}`);
       }
 
       await orchestrator.shutdown();
@@ -181,17 +204,20 @@ export const epicFetchCommand = new Command('fetch')
   });
 
 // ============================================================================
-// Epic Watch Command
+// Epic Watch Command (with Webhook Support)
 // ============================================================================
 
 export const epicWatchCommand = new Command('watch')
   .description('Watch epic issues for new assignments and pick up work')
   .option('--epic <epicId>', 'Epic ID to watch')
   .option('--repo <repo>', 'Repository name (owner/repo format)')
-  .option('--interval <seconds>', 'Poll interval in seconds', '30')
-  .option('--agent-type <type>', 'Only watch for tasks matching this agent type')
+  .option('--mode <mode>', 'Watch mode: webhook, poll, or hybrid (default: hybrid)', 'hybrid')
+  .option('--interval <seconds>', 'Poll interval in seconds (for poll/hybrid mode)', '30')
+  .option('--webhook-port <port>', 'Webhook server port (for webhook/hybrid mode)', '3456')
+  .option('--webhook-secret <secret>', 'Webhook secret for signature verification')
   .option('--auto-work', 'Automatically start working on assigned tasks')
   .option('--once', 'Check once and exit (no continuous watching)')
+  .option('--catch-up', 'Sync any missed assignments on startup (default: true)')
   .action(async (options) => {
     try {
       console.log('🐝 Hive-Mind Epic Watcher\n');
@@ -212,7 +238,9 @@ export const epicWatchCommand = new Command('watch')
         process.exit(1);
       }
 
-      const interval = parseInt(options.interval) * 1000;
+      const pollInterval = parseInt(options.interval) * 1000;
+      const webhookPort = parseInt(options.webhookPort);
+      const mode = options.mode as 'webhook' | 'poll' | 'hybrid';
 
       // Initialize orchestrator
       const orchestrator = createHiveMindOrchestrator({
@@ -234,107 +262,180 @@ export const epicWatchCommand = new Command('watch')
       }
 
       console.log(`Watching epic: ${epic.epicId}`);
-      console.log(`Poll interval: ${options.interval}s`);
-      console.log(`Agent type filter: ${options.agentType || 'all'}\n`);
+      console.log(`Mode: ${mode}`);
+      if (mode !== 'webhook') console.log(`Poll interval: ${options.interval}s`);
+      if (mode !== 'poll') console.log(`Webhook port: ${webhookPort}`);
+      console.log('');
 
-      // Get hive-mind agents
-      const db = await DatabaseManager.getInstance();
-      const activeSwarm = await db.getActiveSwarm();
-      let hiveMind: HiveMind | null = null;
-
-      if (activeSwarm) {
-        hiveMind = await HiveMind.load(activeSwarm.id);
-        console.log(`Connected to swarm: ${activeSwarm.name}`);
+      // Get hive-mind
+      const hiveMind = await getHiveMind();
+      if (hiveMind) {
+        console.log(`Connected to hive-mind swarm`);
       } else {
-        console.log('No active swarm - watching only (no auto-assignment)');
+        console.log('No active swarm - watching only (no auto-work)');
       }
 
-      // Track known tasks to detect new assignments
-      let knownTaskIds = new Set(epic.tasks.map(t => t.taskId));
-      let lastCheckTime = new Date();
+      // Track known assigned tasks to detect new assignments
+      let knownAssignedIssues = new Set<number>();
 
-      const checkForUpdates = async () => {
-        try {
-          console.log(`\n[${new Date().toISOString()}] Checking for updates...`);
+      // Initialize with currently assigned tasks
+      const initialAssigned = orchestrator.getReadyTasks(epic.epicId, {
+        requireAssignment: true,
+        includeDependencyCheck: false,
+      });
+      for (const task of initialAssigned) {
+        knownAssignedIssues.add(task.issueNumber);
+      }
+      console.log(`Initially assigned tasks: ${knownAssignedIssues.size}`);
 
-          // Refresh from GitHub
-          await orchestrator.refreshTaskStatuses(epic.epicId);
-          const currentEpic = orchestrator.getEpic(epic.epicId);
+      // Catch-up sync: process any assigned tasks that haven't been started
+      if (options.catchUp !== false) {
+        console.log('\nCatch-up sync: Checking for missed assignments...');
+        const readyAssigned = orchestrator.getReadyTasks(epic.epicId, {
+          requireAssignment: true,
+          includeDependencyCheck: true,
+        });
 
-          if (!currentEpic) return;
+        if (readyAssigned.length > 0) {
+          console.log(`Found ${readyAssigned.length} assigned task(s) ready for work:`);
+          for (const task of readyAssigned) {
+            console.log(`  📋 #${task.issueNumber}: ${task.title}`);
+            console.log(`     Assignees: ${task.githubAssignees?.join(', ')}`);
 
-          // Get ready tasks
-          const readyTasks = orchestrator.getReadyTasks(epic.epicId, {
-            agentType: options.agentType,
-            includeDependencyCheck: true,
-          });
-
-          // Check for newly ready tasks
-          const newReadyTasks = readyTasks.filter(t => !knownTaskIds.has(t.taskId));
-
-          if (newReadyTasks.length > 0) {
-            console.log(`\n🆕 ${newReadyTasks.length} new task(s) ready for pickup:`);
-
-            for (const task of newReadyTasks) {
-              console.log(`  📋 #${task.issueNumber}: ${task.title}`);
-              console.log(`     Phase: ${task.phase}`);
-              if (task.assignedAgent) {
-                console.log(`     Assigned to: ${task.assignedAgent.name}`);
-              }
-
-              // Auto-work if enabled and we have hive-mind
-              if (options.autoWork && hiveMind) {
-                await hiveMind.submitTask({
-                  description: `[Epic #${task.issueNumber}] ${task.title}`,
-                  priority: 'high',
-                  strategy: 'adaptive',
-                  requiredCapabilities: task.assignedAgent?.skills || [],
-                  metadata: {
-                    epicId: epic.epicId,
-                    issueNumber: task.issueNumber,
-                    taskId: task.taskId,
-                  },
-                });
-
-                await orchestrator.updateTaskStatus(epic.epicId, task.taskId, 'In Progress');
-                console.log(`     ✓ Started work via hive-mind`);
-              }
-
-              knownTaskIds.add(task.taskId);
+            if (options.autoWork && hiveMind) {
+              await startWorkOnTask(hiveMind, orchestrator, epic, task);
+              console.log(`     ✓ Started work`);
             }
           }
-
-          // Summary
-          const summary = orchestrator.getTaskStatusSummary(epic.epicId);
-          console.log(`Status: Ready=${summary.ready}, InProgress=${summary.inProgress}, Done=${summary.done}`);
-
-          lastCheckTime = new Date();
-
-        } catch (error) {
-          console.error('Check failed:', error);
+        } else {
+          console.log('No missed assignments found.');
         }
-      };
-
-      // Initial check
-      await checkForUpdates();
-
-      if (options.once) {
-        await orchestrator.shutdown();
-        return;
       }
 
-      // Continuous watching
-      console.log('\nWatching for changes... (Ctrl+C to stop)\n');
+      // Handler for new assignments
+      const handleNewAssignment = async (issueNumber: number, assignee: string) => {
+        // Refresh from GitHub
+        await orchestrator.refreshTaskStatuses(epic.epicId);
 
-      const watchInterval = setInterval(checkForUpdates, interval);
+        const task = orchestrator.getTaskByIssue(epic.epicId, issueNumber);
+        if (!task) {
+          console.log(`  Issue #${issueNumber} not part of epic`);
+          return;
+        }
+
+        if (task.status === 'in_progress' || task.status === 'done') {
+          console.log(`  Task #${issueNumber} already ${task.status}`);
+          return;
+        }
+
+        console.log(`\n🆕 New assignment: #${issueNumber} → ${assignee}`);
+        console.log(`   ${task.title}`);
+        console.log(`   Phase: ${task.phase}`);
+
+        if (options.autoWork && hiveMind) {
+          await startWorkOnTask(hiveMind, orchestrator, epic, task);
+          console.log(`   ✓ Started work via hive-mind`);
+        } else {
+          console.log(`   Ready for pickup (--auto-work not enabled)`);
+        }
+
+        knownAssignedIssues.add(issueNumber);
+      };
+
+      // Setup webhook server if needed
+      let webhookServer: GitHubWebhookServer | null = null;
+      if (mode === 'webhook' || mode === 'hybrid') {
+        webhookServer = createWebhookServer({
+          port: webhookPort,
+          secret: options.webhookSecret,
+          repos: [`${owner}/${repoName}`],
+          epicLabelPrefix: 'epic:',
+        });
+
+        // Handle assignment events
+        webhookServer.on('issue:assigned', async (event: AssignmentEvent) => {
+          if (event.epicId === epic.epicId || event.epicId === undefined) {
+            await handleNewAssignment(event.issueNumber, event.assignee);
+          }
+        });
+
+        webhookServer.on('issue:closed', async (event) => {
+          console.log(`\n✅ Issue #${event.issueNumber} closed by ${event.closedBy}`);
+        });
+
+        webhookServer.on('error', (error) => {
+          console.error('Webhook error:', error);
+        });
+
+        await webhookServer.start();
+        console.log(`\nWebhook server listening on port ${webhookPort}`);
+        console.log(getWebhookSetupInstructions(
+          webhookServer.getWebhookUrl('your-server.com'),
+          options.webhookSecret
+        ));
+      }
+
+      // Setup polling if needed
+      let pollIntervalId: NodeJS.Timeout | null = null;
+      if (mode === 'poll' || mode === 'hybrid') {
+        const checkForUpdates = async () => {
+          try {
+            // Refresh from GitHub
+            await orchestrator.refreshTaskStatuses(epic.epicId);
+
+            // Get currently assigned tasks
+            const assignedTasks = orchestrator.getReadyTasks(epic.epicId, {
+              requireAssignment: true,
+              includeDependencyCheck: true,
+            });
+
+            // Find new assignments
+            for (const task of assignedTasks) {
+              if (!knownAssignedIssues.has(task.issueNumber)) {
+                const assignees = task.githubAssignees?.join(', ') || 'unknown';
+                await handleNewAssignment(task.issueNumber, assignees);
+              }
+            }
+
+            // Summary
+            const summary = orchestrator.getTaskStatusSummary(epic.epicId);
+            const timestamp = new Date().toISOString().substring(11, 19);
+            console.log(`[${timestamp}] Ready=${summary.ready}, InProgress=${summary.inProgress}, Done=${summary.done}`);
+
+          } catch (error) {
+            console.error('Poll check failed:', error);
+          }
+        };
+
+        // Initial check
+        if (!options.once) {
+          console.log(`\nPolling every ${options.interval}s for new assignments...`);
+          pollIntervalId = setInterval(checkForUpdates, pollInterval);
+        }
+
+        // Do one check now
+        await checkForUpdates();
+
+        if (options.once) {
+          if (webhookServer) await webhookServer.stop();
+          await orchestrator.shutdown();
+          return;
+        }
+      }
 
       // Handle shutdown
-      process.on('SIGINT', async () => {
+      console.log('\nWatching for assignments... (Ctrl+C to stop)\n');
+
+      const shutdown = async () => {
         console.log('\n\nStopping watcher...');
-        clearInterval(watchInterval);
+        if (pollIntervalId) clearInterval(pollIntervalId);
+        if (webhookServer) await webhookServer.stop();
         await orchestrator.shutdown();
         process.exit(0);
-      });
+      };
+
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
 
     } catch (error) {
       console.error('Error starting watcher:', error);
@@ -418,16 +519,102 @@ export const epicCompleteCommand = new Command('complete')
         console.log(`\n❌ Task marked as failed`);
       }
 
-      // Show next task recommendation
+      // Show next task recommendation (assigned tasks only)
       const nextTask = orchestrator.getNextTask(epic.epicId);
       if (nextTask) {
-        console.log(`\n🎯 Next recommended task: #${nextTask.issueNumber} - ${nextTask.title}`);
+        console.log(`\n🎯 Next assigned task: #${nextTask.issueNumber} - ${nextTask.title}`);
+        console.log(`   Assignees: ${nextTask.githubAssignees?.join(', ')}`);
+      } else {
+        // Check for unassigned tasks
+        const unassigned = orchestrator.getUnassignedTasks(epic.epicId);
+        if (unassigned.length > 0) {
+          console.log(`\n⏳ ${unassigned.length} task(s) waiting for assignment`);
+        }
       }
 
       await orchestrator.shutdown();
 
     } catch (error) {
       console.error('Error completing task:', error);
+      process.exit(1);
+    }
+  });
+
+// ============================================================================
+// Epic Unassigned Command
+// ============================================================================
+
+export const epicUnassignedCommand = new Command('unassigned')
+  .description('List tasks waiting for assignment (for human review)')
+  .requiredOption('--repo <repo>', 'Repository name (owner/repo format)')
+  .option('--epic <epicId>', 'Epic ID (auto-detected if not provided)')
+  .option('--json', 'Output in JSON format')
+  .action(async (options) => {
+    try {
+      // Parse repo
+      const parts = options.repo.split('/');
+      if (parts.length !== 2) {
+        console.error('Error: Repository must be in owner/repo format');
+        process.exit(1);
+      }
+      const [owner, repoName] = parts;
+
+      // Initialize orchestrator
+      const orchestrator = createHiveMindOrchestrator({
+        owner,
+        repo: repoName,
+        enableVectorSearch: true,
+        enableLearning: true,
+      });
+
+      await orchestrator.initialize();
+
+      // Load epic
+      const epic = await orchestrator.loadEpicFromGitHub(repoName, options.epic);
+
+      if (!epic) {
+        console.error('Error: No epic found in repository');
+        await orchestrator.shutdown();
+        process.exit(1);
+      }
+
+      // Refresh statuses
+      await orchestrator.refreshTaskStatuses(epic.epicId);
+
+      const unassigned = orchestrator.getUnassignedTasks(epic.epicId);
+
+      if (options.json) {
+        console.log(JSON.stringify(unassigned, null, 2));
+      } else {
+        console.log('🐝 Hive-Mind Epic - Tasks Awaiting Assignment\n');
+        console.log(`Epic: ${epic.epicId}`);
+        console.log(`URL: ${epic.projectUrl}\n`);
+
+        if (unassigned.length === 0) {
+          console.log('✅ All tasks are assigned!\n');
+        } else {
+          console.log(`⏳ ${unassigned.length} task(s) waiting for assignment:\n`);
+
+          for (const task of unassigned) {
+            console.log(`  📋 #${task.issueNumber}: ${task.title}`);
+            console.log(`     Phase: ${task.phase}`);
+            console.log(`     Status: ${task.status}`);
+            if (task.assignedAgent) {
+              console.log(`     Recommended: ${task.assignedAgent.name} (${task.assignedAgent.type})`);
+            }
+            console.log(`     URL: ${task.issueUrl}`);
+            console.log('');
+          }
+
+          console.log('Assign tasks on GitHub to enable agents to pick them up.');
+          console.log(`  gh issue edit <number> --repo ${owner}/${repoName} --add-assignee <username>`);
+        }
+      }
+
+      await orchestrator.shutdown();
+
+    } catch (error) {
+      console.error('Error listing unassigned tasks:', error);
       process.exit(1);
     }
   });
@@ -474,6 +661,8 @@ export const epicStatusCommand = new Command('epic-status')
       await orchestrator.refreshTaskStatuses(epic.epicId);
 
       const summary = orchestrator.getTaskStatusSummary(epic.epicId);
+      const unassigned = orchestrator.getUnassignedTasks(epic.epicId);
+      const assigned = orchestrator.getReadyTasks(epic.epicId, { requireAssignment: true });
 
       if (options.json) {
         console.log(JSON.stringify({
@@ -481,6 +670,8 @@ export const epicStatusCommand = new Command('epic-status')
           projectNumber: epic.projectNumber,
           projectUrl: epic.projectUrl,
           summary,
+          unassignedCount: unassigned.length,
+          assignedCount: assigned.length,
           tasks: epic.tasks,
         }, null, 2));
       } else {
@@ -492,7 +683,7 @@ export const epicStatusCommand = new Command('epic-status')
         console.log('Task Summary:');
         console.log(`  Total: ${summary.total}`);
         console.log(`  Backlog: ${summary.backlog}`);
-        console.log(`  Ready: ${summary.ready}`);
+        console.log(`  Ready: ${summary.ready} (${unassigned.length} unassigned, ${assigned.length} assigned)`);
         console.log(`  In Progress: ${summary.inProgress}`);
         console.log(`  Review: ${summary.review}`);
         console.log(`  Done: ${summary.done}`);
@@ -512,16 +703,17 @@ export const epicStatusCommand = new Command('epic-status')
             'done': '✅',
             'in_progress': '🔄',
             'review': '👀',
-            'ready': '📋',
+            'ready': task.githubAssignees?.length ? '📋' : '⏳',
             'backlog': '📦',
             'blocked': '🚫',
           }[task.status] || '❓';
 
+          const assigneeInfo = task.githubAssignees?.length
+            ? `[${task.githubAssignees.join(', ')}]`
+            : '[unassigned]';
+
           console.log(`  ${statusIcon} #${task.issueNumber}: ${task.title}`);
-          console.log(`     Phase: ${task.phase} | Status: ${task.status}`);
-          if (task.assignedAgent) {
-            console.log(`     Agent: ${task.assignedAgent.name}`);
-          }
+          console.log(`     Phase: ${task.phase} | Status: ${task.status} ${assigneeInfo}`);
         }
       }
 
@@ -542,6 +734,7 @@ export const epicCommand = new Command('epic')
   .addCommand(epicFetchCommand)
   .addCommand(epicWatchCommand)
   .addCommand(epicCompleteCommand)
+  .addCommand(epicUnassignedCommand)
   .addCommand(epicStatusCommand);
 
 export default epicCommand;

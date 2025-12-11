@@ -85,6 +85,7 @@ export interface CreatedTask {
   issueState: 'open' | 'closed';
   dependencies?: string[]; // Task IDs this task depends on
   blockedBy?: string; // Reason if blocked
+  githubAssignees?: string[]; // GitHub usernames explicitly assigned to this issue
 }
 
 export interface TaskCompletionResult {
@@ -952,10 +953,17 @@ export class HiveMindGitHubOrchestrator extends EventEmitter {
       phase?: SparcPhase['name'];
       agentType?: string;
       includeDependencyCheck?: boolean;
+      /** If true, only return tasks with explicit GitHub assignees (default: true) */
+      requireAssignment?: boolean;
+      /** GitHub username to filter for - only return tasks assigned to this user */
+      assignee?: string;
     }
   ): CreatedTask[] {
     const epic = this.epicCache.get(epicId);
     if (!epic) return [];
+
+    // Default to requiring assignment (agents wait for explicit assignment)
+    const requireAssignment = options?.requireAssignment !== false;
 
     let readyTasks = epic.tasks.filter(task => {
       // Task must be in 'ready' or 'backlog' status
@@ -976,6 +984,21 @@ export class HiveMindGitHubOrchestrator extends EventEmitter {
       // Filter by agent type if specified
       if (options?.agentType && task.assignedAgent?.type !== options.agentType) {
         return false;
+      }
+
+      // IMPORTANT: Only return tasks with explicit GitHub assignees
+      // This ensures agents wait for manual assignment before picking up work
+      if (requireAssignment) {
+        if (!task.githubAssignees || task.githubAssignees.length === 0) {
+          return false;
+        }
+      }
+
+      // Filter by specific assignee if provided
+      if (options?.assignee) {
+        if (!task.githubAssignees?.includes(options.assignee)) {
+          return false;
+        }
       }
 
       return true;
@@ -1009,6 +1032,35 @@ export class HiveMindGitHubOrchestrator extends EventEmitter {
     });
 
     return readyTasks;
+  }
+
+  /**
+   * Get tasks that are pending assignment (ready but not yet assigned)
+   * Use this to see what tasks are available to be assigned
+   * @param epicId Epic identifier
+   */
+  getUnassignedTasks(epicId: string): CreatedTask[] {
+    const epic = this.epicCache.get(epicId);
+    if (!epic) return [];
+
+    return epic.tasks.filter(task => {
+      // Task must be in 'ready' or 'backlog' status
+      if (task.status !== 'ready' && task.status !== 'backlog') {
+        return false;
+      }
+
+      // Task must be open
+      if (task.issueState !== 'open') {
+        return false;
+      }
+
+      // Task must NOT have any GitHub assignees
+      if (task.githubAssignees && task.githubAssignees.length > 0) {
+        return false;
+      }
+
+      return true;
+    });
   }
 
   /**
