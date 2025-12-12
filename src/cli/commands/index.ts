@@ -23,8 +23,8 @@ import { statusCommand } from './status.js';
 import { monitorCommand } from './monitor.js';
 import { sessionCommand } from './session.js';
 
-// Import teammate-agents commands
-import { setupTeammateCommands } from './teammate.js';
+// Import cto-flow-agents commands
+import { setupCtoFlowCommands } from './cto-flow.js';
 
 let orchestrator: Orchestrator | null = null;
 let configManager: ConfigManager | null = null;
@@ -2539,8 +2539,8 @@ Now, please proceed with the task: ${task}`;
     cli.command(command);
   }
 
-  // Add teammate-agents commands (epic management, context restoration)
-  setupTeammateCommands(cli);
+  // Add cto-flow-agents commands (epic management, context restoration)
+  setupCtoFlowCommands(cli);
 }
 
 function getCapabilitiesForType(type: string): string[] {

@@ -14,8 +14,8 @@
  */
 
 import { Command } from '../../commander-fix.js';
-import { HiveMindGitHubOrchestrator, createHiveMindOrchestrator, CreatedTask } from '../../../teammate-agents/integration/hive-mind-github.js';
-import { GitHubWebhookServer, createWebhookServer, getWebhookSetupInstructions, AssignmentEvent } from '../../../teammate-agents/github/webhook-server.js';
+import { HiveMindGitHubOrchestrator, createHiveMindOrchestrator, CreatedTask } from '../../../cto-flow-agents/integration/hive-mind-github.js';
+import { GitHubWebhookServer, createWebhookServer, getWebhookSetupInstructions, AssignmentEvent } from '../../../cto-flow-agents/github/webhook-server.js';
 import { HiveMind } from '../../../hive-mind/core/HiveMind.js';
 import { DatabaseManager } from '../../../hive-mind/core/DatabaseManager.js';
 

@@ -50,8 +50,8 @@ function createMockGitHubProjectsTools(): MockMCPTool[] {
       handler: async (input: any, context?: any) => {
         mockLogger.info('Creating epic', input);
         if (!context?.orchestrator) throw new Error('Orchestrator not available');
-        const tm = context.orchestrator.getTeammateManager?.();
-        if (!tm) throw new Error('TeammateManager not available');
+        const tm = context.orchestrator.getCtoFlowManager?.();
+        if (!tm) throw new Error('CtoFlowManager not available');
         const epicId = await tm.createEpic(input.title, input.description);
         return { success: true, epicId };
       },
@@ -69,8 +69,8 @@ function createMockGitHubProjectsTools(): MockMCPTool[] {
       handler: async (input: any, context?: any) => {
         mockLogger.info('Listing epics', input);
         if (!context?.orchestrator) throw new Error('Orchestrator not available');
-        const tm = context.orchestrator.getTeammateManager?.();
-        if (!tm) throw new Error('TeammateManager not available');
+        const tm = context.orchestrator.getCtoFlowManager?.();
+        if (!tm) throw new Error('CtoFlowManager not available');
         const epics = await tm.listEpics();
         let filtered = epics;
         if (input.status === 'active') {
@@ -92,8 +92,8 @@ function createMockGitHubProjectsTools(): MockMCPTool[] {
       handler: async (input: any, context?: any) => {
         mockLogger.info('Getting epic', input);
         if (!context?.orchestrator) throw new Error('Orchestrator not available');
-        const tm = context.orchestrator.getTeammateManager?.();
-        if (!tm) throw new Error('TeammateManager not available');
+        const tm = context.orchestrator.getCtoFlowManager?.();
+        if (!tm) throw new Error('CtoFlowManager not available');
         const epic = await tm.getEpic(input.epicId);
         return { success: true, epic };
       },
@@ -109,8 +109,8 @@ function createMockGitHubProjectsTools(): MockMCPTool[] {
       handler: async (input: any, context?: any) => {
         mockLogger.info('Getting progress', input);
         if (!context?.orchestrator) throw new Error('Orchestrator not available');
-        const tm = context.orchestrator.getTeammateManager?.();
-        if (!tm) throw new Error('TeammateManager not available');
+        const tm = context.orchestrator.getCtoFlowManager?.();
+        if (!tm) throw new Error('CtoFlowManager not available');
         const progress = await tm.getEpicProgress(input.epicId);
         return { success: true, progress };
       },
@@ -133,8 +133,8 @@ function createMockGitHubProjectsTools(): MockMCPTool[] {
       handler: async (input: any, context?: any) => {
         mockLogger.info('Creating task', input);
         if (!context?.orchestrator) throw new Error('Orchestrator not available');
-        const tm = context.orchestrator.getTeammateManager?.();
-        if (!tm) throw new Error('TeammateManager not available');
+        const tm = context.orchestrator.getCtoFlowManager?.();
+        if (!tm) throw new Error('CtoFlowManager not available');
         const issueNumber = await tm.createEpicTask(input.epicId, input.title, input.description, input.labels);
         return { success: true, issueNumber };
       },
@@ -182,8 +182,8 @@ function createMockGitHubProjectsTools(): MockMCPTool[] {
       handler: async (input: any, context?: any) => {
         mockLogger.info('Getting available issues', input);
         if (!context?.orchestrator) throw new Error('Orchestrator not available');
-        const tm = context.orchestrator.getTeammateManager?.();
-        if (!tm) throw new Error('TeammateManager not available');
+        const tm = context.orchestrator.getCtoFlowManager?.();
+        if (!tm) throw new Error('CtoFlowManager not available');
         const issues = await tm.getAvailableIssuesForAgent(input.agentId, input.epicId);
         return { success: true, issues: issues.slice(0, input.limit || 10), count: issues.length };
       },
@@ -348,20 +348,20 @@ describe('GitHub Projects MCP Tools', () => {
       ).rejects.toThrow('Orchestrator not available');
     });
 
-    it('should throw error when TeammateManager is not available', async () => {
+    it('should throw error when CtoFlowManager is not available', async () => {
       const tool = tools.find(t => t.name === 'github-projects/epic_create');
-      const mockOrchestrator = { getTeammateManager: () => null };
+      const mockOrchestrator = { getCtoFlowManager: () => null };
       await expect(
         tool!.handler({ title: 'Test', description: 'Test' }, { orchestrator: mockOrchestrator })
-      ).rejects.toThrow('TeammateManager not available');
+      ).rejects.toThrow('CtoFlowManager not available');
     });
 
-    it('should create epic when TeammateManager is available', async () => {
+    it('should create epic when CtoFlowManager is available', async () => {
       const tool = tools.find(t => t.name === 'github-projects/epic_create');
-      const mockTeammateManager = {
+      const mockCtoFlowManager = {
         createEpic: jest.fn().mockResolvedValue('epic-123'),
       };
-      const mockOrchestrator = { getTeammateManager: () => mockTeammateManager };
+      const mockOrchestrator = { getCtoFlowManager: () => mockCtoFlowManager };
 
       const result = await tool!.handler(
         { title: 'Test Epic', description: 'Test Description' },
@@ -370,7 +370,7 @@ describe('GitHub Projects MCP Tools', () => {
 
       expect(result.success).toBe(true);
       expect(result.epicId).toBe('epic-123');
-      expect(mockTeammateManager.createEpic).toHaveBeenCalledWith('Test Epic', 'Test Description');
+      expect(mockCtoFlowManager.createEpic).toHaveBeenCalledWith('Test Epic', 'Test Description');
     });
   });
 
@@ -391,14 +391,14 @@ describe('GitHub Projects MCP Tools', () => {
   describe('epic_list tool', () => {
     it('should filter by status', async () => {
       const tool = tools.find(t => t.name === 'github-projects/epic_list');
-      const mockTeammateManager = {
+      const mockCtoFlowManager = {
         listEpics: jest.fn().mockResolvedValue([
           { id: 'epic-1', title: 'Active Epic', status: 'active' },
           { id: 'epic-2', title: 'Completed Epic', status: 'completed' },
           { id: 'epic-3', title: 'Another Active', status: 'in_progress' },
         ]),
       };
-      const mockOrchestrator = { getTeammateManager: () => mockTeammateManager };
+      const mockOrchestrator = { getCtoFlowManager: () => mockCtoFlowManager };
 
       const result = await tool!.handler(
         { status: 'active' },
@@ -412,12 +412,12 @@ describe('GitHub Projects MCP Tools', () => {
 
     it('should respect limit', async () => {
       const tool = tools.find(t => t.name === 'github-projects/epic_list');
-      const mockTeammateManager = {
+      const mockCtoFlowManager = {
         listEpics: jest.fn().mockResolvedValue(
           Array.from({ length: 100 }, (_, i) => ({ id: `epic-${i}`, status: 'active' }))
         ),
       };
-      const mockOrchestrator = { getTeammateManager: () => mockTeammateManager };
+      const mockOrchestrator = { getCtoFlowManager: () => mockCtoFlowManager };
 
       const result = await tool!.handler(
         { status: 'all', limit: 10 },
@@ -439,13 +439,13 @@ describe('GitHub Projects MCP Tools', () => {
 
     it('should return available issues for agent', async () => {
       const tool = tools.find(t => t.name === 'github-projects/agent_available_issues');
-      const mockTeammateManager = {
+      const mockCtoFlowManager = {
         getAvailableIssuesForAgent: jest.fn().mockResolvedValue([
           { number: 1, title: 'Issue 1', score: 85 },
           { number: 2, title: 'Issue 2', score: 72 },
         ]),
       };
-      const mockOrchestrator = { getTeammateManager: () => mockTeammateManager };
+      const mockOrchestrator = { getCtoFlowManager: () => mockCtoFlowManager };
 
       const result = await tool!.handler(
         { agentId: 'agent-1' },
@@ -481,10 +481,10 @@ describe('GitHub Projects MCP Tools', () => {
   describe('Tool Handler Logging', () => {
     it('should call logger.info when epic_create is invoked', async () => {
       const tool = tools.find(t => t.name === 'github-projects/epic_create');
-      const mockTeammateManager = {
+      const mockCtoFlowManager = {
         createEpic: jest.fn().mockResolvedValue('epic-1'),
       };
-      const mockOrchestrator = { getTeammateManager: () => mockTeammateManager };
+      const mockOrchestrator = { getCtoFlowManager: () => mockCtoFlowManager };
 
       await tool!.handler({ title: 'Test', description: 'Test' }, { orchestrator: mockOrchestrator });
 

@@ -18,14 +18,14 @@ import {
   createHiveMindOrchestrator,
   EpicPlan,
   CreatedEpic,
-} from '../../teammate-agents/integration/hive-mind-github.js';
+} from '../../cto-flow-agents/integration/hive-mind-github.js';
 import { HiveMind } from '../../hive-mind/core/HiveMind.js';
 import { DatabaseManager } from '../../hive-mind/core/DatabaseManager.js';
 import {
   registerEpicWorkHooks,
   unregisterEpicWorkHooks,
   triggerWorkComplete,
-} from '../../teammate-agents/hooks/epic-work-hooks.js';
+} from '../../cto-flow-agents/hooks/epic-work-hooks.js';
 
 // Skip tests if no GitHub token available
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;

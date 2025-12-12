@@ -1,7 +1,7 @@
 /**
  * GitHub Projects MCP Tools
  *
- * MCP tools for GitHub Projects v2 integration with teammate-agents.
+ * MCP tools for GitHub Projects v2 integration with cto-flow-agents.
  * Enables project creation, task management, agent assignment, and progress tracking.
  */
 
@@ -61,6 +61,19 @@ export function createGitHubProjectsTools(logger: ILogger): MCPTool[] {
     createHiveMindNextTaskTool(logger),
     createHiveMindTaskStatusSummaryTool(logger),
     createHiveMindRefreshStatusTool(logger),
+
+    // CTO Flow tools
+    createCTOFlowCreateEpicTool(logger),
+    createCTOFlowUnassignedTasksTool(logger),
+    createCTOFlowWatchAssignmentsTool(logger),
+    createCTOFlowEpicTool(logger),
+
+    // CTO Flow: Label-based agent assignment (since agents aren't GitHub users)
+    createCTOFlowReleaseTaskTool(logger),
+    createCTOFlowAssignAgentTool(logger),
+    createCTOFlowMyAssignmentsTool(logger),
+    createCTOFlowClaimTaskTool(logger),
+    createCTOFlowCompleteTaskTool(logger),
   ];
 }
 
@@ -109,13 +122,13 @@ function createEpicCreateTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available - ensure teammate-agents is configured');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available - ensure cto-flow-agents is configured');
       }
 
-      const epicId = await teammateManager.createEpic(input.title, input.description);
-      const epic = await teammateManager.getEpic(epicId);
+      const epicId = await ctoFlowManager.createEpic(input.title, input.description);
+      const epic = await ctoFlowManager.getEpic(epicId);
 
       return {
         success: true,
@@ -159,12 +172,12 @@ function createEpicListTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      const epics = await teammateManager.listEpics();
+      const epics = await ctoFlowManager.listEpics();
 
       let filtered = epics;
       if (input.status === 'active') {
@@ -207,12 +220,12 @@ function createEpicGetTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      const epic = await teammateManager.getEpic(input.epicId);
+      const epic = await ctoFlowManager.getEpic(input.epicId);
       if (!epic) {
         throw new Error(`Epic not found: ${input.epicId}`);
       }
@@ -250,12 +263,12 @@ function createEpicProgressTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      const progress = await teammateManager.getEpicProgress(input.epicId);
+      const progress = await ctoFlowManager.getEpicProgress(input.epicId);
 
       return {
         success: true,
@@ -318,12 +331,12 @@ function createEpicTaskCreateTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      const issueNumber = await teammateManager.createEpicTask(
+      const issueNumber = await ctoFlowManager.createEpicTask(
         input.epicId,
         input.title,
         input.description,
@@ -371,12 +384,12 @@ function createEpicTaskListTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      const bridge = teammateManager.getProjectBridge();
+      const bridge = ctoFlowManager.getProjectBridge();
       if (!bridge) {
         throw new Error('GitHub Projects not configured');
       }
@@ -444,12 +457,12 @@ function createEpicTaskUpdateTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      const bridge = teammateManager.getProjectBridge();
+      const bridge = ctoFlowManager.getProjectBridge();
       if (!bridge) {
         throw new Error('GitHub Projects not configured');
       }
@@ -506,12 +519,12 @@ function createAgentAvailableIssuesTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      const issues = await teammateManager.getAvailableIssuesForAgent(
+      const issues = await ctoFlowManager.getAvailableIssuesForAgent(
         input.agentId,
         input.epicId
       );
@@ -559,12 +572,12 @@ function createAgentAssignIssueTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      await teammateManager.assignAgentToIssue(input.agentId, input.issueNumber);
+      await ctoFlowManager.assignAgentToIssue(input.agentId, input.issueNumber);
 
       return {
         success: true,
@@ -609,12 +622,12 @@ function createAgentUnassignIssueTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      const bridge = teammateManager.getProjectBridge();
+      const bridge = ctoFlowManager.getProjectBridge();
       if (!bridge) {
         throw new Error('GitHub Projects not configured');
       }
@@ -664,12 +677,12 @@ function createPRLinkTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      await teammateManager.linkPRToIssue(input.prNumber, input.issueNumber);
+      await ctoFlowManager.linkPRToIssue(input.prNumber, input.issueNumber);
 
       return {
         success: true,
@@ -706,12 +719,12 @@ function createPRMergeTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      await teammateManager.handlePRMerge(input.prNumber);
+      await ctoFlowManager.handlePRMerge(input.prNumber);
 
       return {
         success: true,
@@ -752,12 +765,12 @@ function createProjectSyncStartTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      teammateManager.startProjectSync(input.epicId, input.intervalMs || 30000);
+      ctoFlowManager.startProjectSync(input.epicId, input.intervalMs || 30000);
 
       return {
         success: true,
@@ -794,12 +807,12 @@ function createProjectSyncStopTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      teammateManager.stopProjectSync(input.epicId);
+      ctoFlowManager.stopProjectSync(input.epicId);
 
       return {
         success: true,
@@ -834,12 +847,12 @@ function createProjectSyncStatusTool(logger: ILogger): MCPTool {
         throw new Error('Orchestrator not available');
       }
 
-      const teammateManager = context.orchestrator.getTeammateManager?.();
-      if (!teammateManager) {
-        throw new Error('TeammateManager not available');
+      const ctoFlowManager = context.orchestrator.getCtoFlowManager?.();
+      if (!ctoFlowManager) {
+        throw new Error('CtoFlowManager not available');
       }
 
-      const bridge = teammateManager.getProjectBridge();
+      const bridge = ctoFlowManager.getProjectBridge();
       if (!bridge) {
         return {
           success: true,
@@ -893,7 +906,7 @@ function createHiveMindEpicLoadTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Loading epic from GitHub', { owner: input.owner, repo: input.repo, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       const orchestrator = createHiveMindOrchestrator({
         owner: input.owner,
@@ -997,7 +1010,7 @@ function createHiveMindTaskCompleteTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Completing task', { epicId: input.epicId, taskId: input.taskId, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       // Get or create orchestrator
       let orchestrator = (context as any)?.hiveMindOrchestrator;
@@ -1068,7 +1081,7 @@ function createHiveMindTaskStatusUpdateTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Updating task status', { epicId: input.epicId, taskId: input.taskId, status: input.status, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1126,7 +1139,7 @@ function createHiveMindDetectCompletedTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Detecting completed tasks', { epicId: input.epicId, workingDir: input.workingDir, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1206,7 +1219,7 @@ function createHiveMindSyncCompletionTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Syncing completion status', { epicId: input.epicId, workingDir: input.workingDir, dryRun: input.dryRun, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1301,7 +1314,7 @@ function createHiveMindRetrospectiveCompleteTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Retrospective complete', { epicId: input.epicId, taskIds: input.taskIds, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1378,7 +1391,7 @@ function createHiveMindBranchCreateTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Creating task branch', { epicId: input.epicId, taskId: input.taskId, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1478,7 +1491,7 @@ function createHiveMindPRCreateTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Creating PR', { epicId: input.epicId, branch: input.branch, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1559,7 +1572,7 @@ function createHiveMindPRListTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Listing PRs', { epicId: input.epicId, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1648,7 +1661,7 @@ function createHiveMindPRLinkTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Linking PR to tasks', { epicId: input.epicId, prNumber: input.prNumber, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1712,7 +1725,7 @@ function createHiveMindPRStatusTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Getting PR status', { epicId: input.epicId, prNumber: input.prNumber, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1800,7 +1813,7 @@ function createHiveMindPRMergeTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Handling PR merge', { epicId: input.epicId, prNumber: input.prNumber, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1867,7 +1880,7 @@ function createHiveMindPRStatsTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Getting PR stats', { epicId: input.epicId, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -1953,7 +1966,7 @@ function createHiveMindReadyTasksTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Getting ready tasks', { epicId: input.epicId, phase: input.phase, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -2045,7 +2058,7 @@ function createHiveMindNextTaskTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Getting next task', { epicId: input.epicId, agentType: input.agentType, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -2135,7 +2148,7 @@ function createHiveMindTaskStatusSummaryTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Getting task status summary', { epicId: input.epicId, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -2218,7 +2231,7 @@ function createHiveMindRefreshStatusTool(logger: ILogger): MCPTool {
     handler: async (input: any, context?: ClaudeFlowToolContext) => {
       logger.info('Refreshing task statuses', { epicId: input.epicId, sessionId: context?.sessionId });
 
-      const { createHiveMindOrchestrator } = await import('../teammate-agents/integration/hive-mind-github.js');
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
 
       let orchestrator = (context as any)?.hiveMindOrchestrator;
       if (!orchestrator) {
@@ -2254,6 +2267,2088 @@ function createHiveMindRefreshStatusTool(logger: ILogger): MCPTool {
         },
         timestamp: new Date().toISOString(),
       };
+    },
+  };
+}
+
+// ============================================================================
+// CTO Flow Tools - Post-SPARC Epic Creation with Octokit
+// ============================================================================
+
+/**
+ * CTO Flow: Create Epic from SPARC Output
+ *
+ * This tool takes SPARC-generated plan data and creates a complete GitHub epic
+ * with project, issues, and task tracking. Uses Octokit through HiveMindGitHubOrchestrator.
+ */
+function createCTOFlowCreateEpicTool(logger: ILogger): MCPTool {
+  return {
+    name: 'ctoflow/create_epic',
+    description: `Create a GitHub Epic from SPARC output using Octokit.
+Takes specification/architecture output and creates:
+- GitHub Project (v2) with SPARC status columns
+- Epic issue with objectives and constraints
+- Task issues for each phase with labels and dependencies
+- Agent skill matching for recommendations (no auto-assignment)
+
+Agents must wait for explicit GitHub assignment before picking up work.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'GitHub owner (user or organization)',
+        },
+        repo: {
+          type: 'string',
+          description: 'GitHub repository name',
+        },
+        title: {
+          type: 'string',
+          description: 'Epic title (from SPARC specification)',
+        },
+        description: {
+          type: 'string',
+          description: 'Epic description summarizing the project',
+        },
+        objectives: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'List of objectives from specification',
+        },
+        constraints: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Technical and business constraints',
+        },
+        tasks: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Task title' },
+              description: { type: 'string', description: 'Task description' },
+              phase: {
+                type: 'string',
+                enum: ['Specification', 'Pseudocode', 'Architecture', 'Refinement', 'Completion'],
+                description: 'SPARC phase for this task'
+              },
+              skills: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Required skills (typescript, api-design, testing, etc.)'
+              },
+              priority: {
+                type: 'string',
+                enum: ['low', 'medium', 'high', 'critical'],
+                description: 'Task priority'
+              },
+              dependencies: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Task IDs this depends on',
+              },
+              estimatedHours: { type: 'number', description: 'Estimated hours' },
+            },
+            required: ['title', 'description', 'phase', 'skills', 'priority'],
+          },
+          description: 'Tasks from architecture phase',
+        },
+        metadata: {
+          type: 'object',
+          description: 'Additional metadata (dataSource, targetUsers, etc.)',
+        },
+      },
+      required: ['owner', 'repo', 'title', 'description', 'objectives', 'constraints', 'tasks'],
+    },
+    handler: async (input: any, context?: ClaudeFlowToolContext) => {
+      logger.info('CTO Flow: Creating epic from SPARC output', {
+        title: input.title,
+        taskCount: input.tasks?.length,
+        sessionId: context?.sessionId,
+      });
+
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
+
+      // Create orchestrator with Octokit
+      const orchestrator = createHiveMindOrchestrator({
+        owner: input.owner,
+        repo: input.repo,
+        enableVectorSearch: true,
+        enableLearning: true,
+        autoCreateLabels: true,
+      });
+
+      await orchestrator.initialize();
+
+      // Build EpicPlan from input
+      const epicPlan = {
+        title: input.title,
+        description: input.description,
+        objectives: input.objectives || [],
+        constraints: input.constraints || [],
+        tasks: (input.tasks || []).map((t: any) => ({
+          title: t.title,
+          description: t.description,
+          phase: t.phase,
+          skills: t.skills || [],
+          priority: t.priority || 'medium',
+          dependencies: t.dependencies,
+          estimatedHours: t.estimatedHours,
+        })),
+        metadata: input.metadata,
+      };
+
+      // Create epic using Octokit
+      const createdEpic = await orchestrator.createEpic(epicPlan);
+
+      logger.info('CTO Flow: Epic created successfully', {
+        epicId: createdEpic.epicId,
+        projectUrl: createdEpic.projectUrl,
+        taskCount: createdEpic.tasks.length,
+      });
+
+      // Store orchestrator in context for subsequent calls
+      if (context) {
+        (context as any).hiveMindOrchestrator = orchestrator;
+        (context as any).activeEpicId = createdEpic.epicId;
+      }
+
+      return {
+        success: true,
+        epicId: createdEpic.epicId,
+        projectUrl: createdEpic.projectUrl,
+        projectNumber: createdEpic.projectNumber,
+        epicIssueNumber: createdEpic.epicIssueNumber,
+        epicIssueUrl: createdEpic.epicIssueUrl,
+        tasks: createdEpic.tasks.map(t => ({
+          taskId: t.taskId,
+          issueNumber: t.issueNumber,
+          issueUrl: t.issueUrl,
+          title: t.title,
+          phase: t.phase,
+          status: t.status,
+          recommendedAgent: t.assignedAgent?.type,
+          assignmentScore: t.assignmentScore,
+        })),
+        message: `Epic created with ${createdEpic.tasks.length} tasks. Tasks are in 'backlog' status awaiting explicit GitHub assignment.`,
+        nextSteps: [
+          'Review tasks in GitHub Project',
+          'Assign human reviewers or agent users to issues',
+          'Use ctoflow/watch_assignments to detect when tasks are assigned',
+          'Agents will only pick up tasks after explicit assignment',
+        ],
+        timestamp: new Date().toISOString(),
+      };
+    },
+  };
+}
+
+/**
+ * CTO Flow: Get Unassigned Tasks
+ *
+ * Returns tasks that are waiting for explicit GitHub assignment.
+ * These tasks have been created but not yet assigned to any user/agent.
+ */
+function createCTOFlowUnassignedTasksTool(logger: ILogger): MCPTool {
+  return {
+    name: 'ctoflow/unassigned_tasks',
+    description: `Get tasks awaiting explicit GitHub assignment.
+Returns all tasks that:
+- Are in 'backlog' or 'ready' status
+- Have no GitHub assignees set
+- Are waiting for human review and assignment
+
+Use this to see what work is pending human decision.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'GitHub owner (user or organization)',
+        },
+        repo: {
+          type: 'string',
+          description: 'GitHub repository name',
+        },
+        epicId: {
+          type: 'string',
+          description: 'Epic ID to check (optional, checks all if not provided)',
+        },
+        phase: {
+          type: 'string',
+          enum: ['Specification', 'Pseudocode', 'Architecture', 'Refinement', 'Completion'],
+          description: 'Filter by SPARC phase',
+        },
+        priority: {
+          type: 'string',
+          enum: ['low', 'medium', 'high', 'critical'],
+          description: 'Filter by priority',
+        },
+      },
+      required: ['owner', 'repo'],
+    },
+    handler: async (input: any, context?: ClaudeFlowToolContext) => {
+      logger.info('CTO Flow: Getting unassigned tasks', {
+        epicId: input.epicId,
+        sessionId: context?.sessionId,
+      });
+
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
+
+      let orchestrator = (context as any)?.hiveMindOrchestrator;
+      if (!orchestrator) {
+        orchestrator = createHiveMindOrchestrator({
+          owner: input.owner,
+          repo: input.repo,
+          enableVectorSearch: true,
+        });
+        await orchestrator.initialize();
+
+        if (input.epicId) {
+          await orchestrator.loadEpicFromGitHub(input.repo, input.epicId);
+        }
+
+        if (context) {
+          (context as any).hiveMindOrchestrator = orchestrator;
+        }
+      }
+
+      // Refresh statuses from GitHub
+      if (input.epicId) {
+        await orchestrator.refreshTaskStatuses(input.epicId);
+      }
+
+      // Get tasks with no GitHub assignees
+      const allTasks = orchestrator.getTasksByStatus(input.epicId, ['backlog', 'ready']);
+
+      const unassignedTasks = allTasks.filter((task: any) => {
+        // No GitHub assignees
+        if (task.githubAssignees && task.githubAssignees.length > 0) {
+          return false;
+        }
+        // Apply phase filter
+        if (input.phase && task.phase !== input.phase) {
+          return false;
+        }
+        // Apply priority filter (need to check metadata)
+        return true;
+      });
+
+      return {
+        success: true,
+        epicId: input.epicId,
+        unassignedCount: unassignedTasks.length,
+        tasks: unassignedTasks.map((t: any) => ({
+          taskId: t.taskId,
+          issueNumber: t.issueNumber,
+          issueUrl: t.issueUrl,
+          title: t.title,
+          phase: t.phase,
+          status: t.status,
+          recommendedAgent: t.assignedAgent?.type,
+          dependencies: t.dependencies,
+        })),
+        message: unassignedTasks.length > 0
+          ? `${unassignedTasks.length} tasks awaiting assignment. Assign users in GitHub to enable agent work.`
+          : 'All tasks have been assigned.',
+        timestamp: new Date().toISOString(),
+      };
+    },
+  };
+}
+
+/**
+ * CTO Flow: Watch for Task Assignments
+ *
+ * Polls or uses webhook to detect when tasks are explicitly assigned in GitHub.
+ * Returns newly assigned tasks that agents can now pick up.
+ */
+function createCTOFlowWatchAssignmentsTool(logger: ILogger): MCPTool {
+  return {
+    name: 'ctoflow/watch_assignments',
+    description: `Watch for explicit GitHub task assignments.
+Checks for tasks that have been assigned to users/agents since last check.
+Returns newly assigned tasks that are ready for work.
+
+In CTO flow, agents must wait for explicit assignment before starting work.
+This tool detects when a human has reviewed and assigned tasks.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'GitHub owner (user or organization)',
+        },
+        repo: {
+          type: 'string',
+          description: 'GitHub repository name',
+        },
+        epicId: {
+          type: 'string',
+          description: 'Epic ID to watch',
+        },
+        agentUsername: {
+          type: 'string',
+          description: 'GitHub username of the agent to filter for',
+        },
+        pollInterval: {
+          type: 'number',
+          description: 'Seconds to wait between checks (for continuous watching)',
+          default: 30,
+        },
+        singleCheck: {
+          type: 'boolean',
+          description: 'If true, check once and return. If false, poll continuously.',
+          default: true,
+        },
+      },
+      required: ['owner', 'repo', 'epicId'],
+    },
+    handler: async (input: any, context?: ClaudeFlowToolContext) => {
+      logger.info('CTO Flow: Watching for assignments', {
+        epicId: input.epicId,
+        agentUsername: input.agentUsername,
+        sessionId: context?.sessionId,
+      });
+
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
+
+      let orchestrator = (context as any)?.hiveMindOrchestrator;
+      if (!orchestrator) {
+        orchestrator = createHiveMindOrchestrator({
+          owner: input.owner,
+          repo: input.repo,
+          enableVectorSearch: true,
+        });
+        await orchestrator.initialize();
+        await orchestrator.loadEpicFromGitHub(input.repo, input.epicId);
+
+        if (context) {
+          (context as any).hiveMindOrchestrator = orchestrator;
+        }
+      }
+
+      // Refresh statuses from GitHub to detect assignment changes
+      await orchestrator.refreshTaskStatuses(input.epicId);
+
+      // Get tasks that are assigned
+      const allTasks = orchestrator.getTasksByStatus(input.epicId, ['backlog', 'ready', 'in_progress']);
+
+      // Filter for tasks with explicit GitHub assignments
+      const assignedTasks = allTasks.filter((task: any) => {
+        // Must have GitHub assignees
+        if (!task.githubAssignees || task.githubAssignees.length === 0) {
+          return false;
+        }
+        // If filtering for specific agent, check username
+        if (input.agentUsername) {
+          return task.githubAssignees.includes(input.agentUsername);
+        }
+        return true;
+      });
+
+      // Split into ready-to-work (backlog/ready) vs already in progress
+      const readyToStart = assignedTasks.filter((t: any) =>
+        t.status === 'backlog' || t.status === 'ready'
+      );
+      const inProgress = assignedTasks.filter((t: any) =>
+        t.status === 'in_progress'
+      );
+
+      return {
+        success: true,
+        epicId: input.epicId,
+        assignedCount: assignedTasks.length,
+        readyToStartCount: readyToStart.length,
+        inProgressCount: inProgress.length,
+        readyToStart: readyToStart.map((t: any) => ({
+          taskId: t.taskId,
+          issueNumber: t.issueNumber,
+          issueUrl: t.issueUrl,
+          title: t.title,
+          phase: t.phase,
+          status: t.status,
+          assignees: t.githubAssignees,
+          dependencies: t.dependencies,
+        })),
+        inProgress: inProgress.map((t: any) => ({
+          taskId: t.taskId,
+          issueNumber: t.issueNumber,
+          title: t.title,
+          assignees: t.githubAssignees,
+        })),
+        message: readyToStart.length > 0
+          ? `${readyToStart.length} assigned tasks ready to start. Use hivemind/task_status_update to mark as 'in_progress' when starting.`
+          : 'No newly assigned tasks found. Waiting for human assignment.',
+        nextSteps: readyToStart.length > 0
+          ? [
+              'Pick up an assigned task',
+              'Update status to in_progress using hivemind/task_status_update',
+              'Complete work and create PR',
+              'Mark task done with hivemind/task_complete',
+            ]
+          : ['Wait for human to assign tasks in GitHub'],
+        timestamp: new Date().toISOString(),
+      };
+    },
+  };
+}
+
+/**
+ * CTO Flow: Create Teammate-Style Epic from SPARC Deliverables
+ *
+ * This is the advanced CTO flow that creates issues like a great CTO manages developers:
+ * - Clear objectives with full architectural context
+ * - Acceptance criteria from SPARC specification
+ * - Implementation guidelines from architecture phase
+ * - ADRs (Architectural Decision Records) linked to issues
+ * - Dependencies and blocking relationships
+ *
+ * Issues contain everything an agent needs to work autonomously.
+ */
+function createCTOFlowEpicTool(logger: ILogger): MCPTool {
+  return {
+    name: 'ctoflow/teammate_epic',
+    description: `Create a comprehensive GitHub Epic with teammate-style issues.
+
+Unlike simple task lists, this creates issues that contain:
+- Full architectural context and guidelines
+- Acceptance criteria with testable conditions
+- Implementation approach from SPARC architecture
+- Related ADRs (Architectural Decision Records)
+- Dependencies and sequencing
+- Code structure and patterns to follow
+
+Agents can pick up these issues and work autonomously with full context,
+like well-managed developers on a real team.
+
+This is the "CTO mode" - set clear objectives, establish workflows,
+remove blockers, and trust agents to deliver.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'GitHub owner (user or organization)',
+        },
+        repo: {
+          type: 'string',
+          description: 'GitHub repository name',
+        },
+        epicTitle: {
+          type: 'string',
+          description: 'Epic title',
+        },
+        epicDescription: {
+          type: 'string',
+          description: 'High-level epic description',
+        },
+        specification: {
+          type: 'object',
+          description: 'SPARC Specification phase output',
+          properties: {
+            requirements: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Functional requirements',
+            },
+            userStories: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  title: { type: 'string' },
+                  description: { type: 'string' },
+                  acceptanceCriteria: { type: 'array', items: { type: 'string' } },
+                  priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+                },
+              },
+            },
+            constraints: {
+              type: 'object',
+              properties: {
+                technical: { type: 'array', items: { type: 'string' } },
+                business: { type: 'array', items: { type: 'string' } },
+              },
+            },
+            risks: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  description: { type: 'string' },
+                  severity: { type: 'string' },
+                  mitigation: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+        architecture: {
+          type: 'object',
+          description: 'SPARC Architecture phase output',
+          properties: {
+            systemDesign: {
+              type: 'string',
+              description: 'Overall system architecture description',
+            },
+            components: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  responsibility: { type: 'string' },
+                  interfaces: { type: 'array', items: { type: 'string' } },
+                  dependencies: { type: 'array', items: { type: 'string' } },
+                },
+              },
+            },
+            dataFlow: {
+              type: 'string',
+              description: 'Data flow description',
+            },
+            patterns: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Design patterns to use',
+            },
+            adrs: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  title: { type: 'string' },
+                  context: { type: 'string' },
+                  decision: { type: 'string' },
+                  consequences: { type: 'array', items: { type: 'string' } },
+                },
+              },
+              description: 'Architectural Decision Records',
+            },
+          },
+        },
+        implementation: {
+          type: 'object',
+          description: 'Implementation tasks derived from architecture',
+          properties: {
+            tasks: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  title: { type: 'string' },
+                  description: { type: 'string' },
+                  phase: { type: 'string', enum: ['Specification', 'Pseudocode', 'Architecture', 'Refinement', 'Completion'] },
+                  component: { type: 'string', description: 'Which architectural component this implements' },
+                  acceptanceCriteria: { type: 'array', items: { type: 'string' } },
+                  implementationNotes: { type: 'string', description: 'Specific implementation guidance' },
+                  testStrategy: { type: 'string', description: 'How to test this task' },
+                  files: { type: 'array', items: { type: 'string' }, description: 'Files to create/modify' },
+                  dependencies: { type: 'array', items: { type: 'string' }, description: 'Task IDs this depends on' },
+                  relatedAdrs: { type: 'array', items: { type: 'string' }, description: 'ADR IDs relevant to this task' },
+                  skills: { type: 'array', items: { type: 'string' } },
+                  priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+                  estimatedHours: { type: 'number' },
+                },
+                required: ['id', 'title', 'description', 'phase'],
+              },
+            },
+          },
+        },
+      },
+      required: ['owner', 'repo', 'epicTitle', 'epicDescription', 'specification', 'architecture', 'implementation'],
+    },
+    handler: async (input: any, context?: ClaudeFlowToolContext) => {
+      logger.info('CTO Flow: Creating teammate-style epic', {
+        title: input.epicTitle,
+        taskCount: input.implementation?.tasks?.length,
+        adrCount: input.architecture?.adrs?.length,
+        sessionId: context?.sessionId,
+      });
+
+      const { createHiveMindOrchestrator } = await import('../cto-flow-agents/integration/hive-mind-github.js');
+
+      // Create orchestrator with Octokit
+      const orchestrator = createHiveMindOrchestrator({
+        owner: input.owner,
+        repo: input.repo,
+        enableVectorSearch: true,
+        enableLearning: true,
+        autoCreateLabels: true,
+      });
+
+      await orchestrator.initialize();
+
+      // Build comprehensive epic body with full context
+      const epicBody = generateTeammateEpicBody(input);
+
+      // Build tasks with rich context
+      const tasksWithContext = (input.implementation?.tasks || []).map((task: any) => {
+        const taskBody = generateTeammateTaskBody(task, input);
+        return {
+          title: task.title,
+          description: taskBody,
+          phase: task.phase || 'Refinement',
+          skills: task.skills || [],
+          priority: task.priority || 'medium',
+          dependencies: task.dependencies,
+          estimatedHours: task.estimatedHours,
+        };
+      });
+
+      // Create the epic using the orchestrator
+      const epicPlan = {
+        title: input.epicTitle,
+        description: epicBody,
+        objectives: input.specification?.requirements || [],
+        constraints: [
+          ...(input.specification?.constraints?.technical || []),
+          ...(input.specification?.constraints?.business || []),
+        ],
+        tasks: tasksWithContext,
+        metadata: {
+          ctoFlow: true,
+          hasAdrs: (input.architecture?.adrs?.length || 0) > 0,
+          componentCount: input.architecture?.components?.length || 0,
+          userStoryCount: input.specification?.userStories?.length || 0,
+        },
+      };
+
+      const createdEpic = await orchestrator.createEpic(epicPlan);
+
+      logger.info('CTO Flow: Teammate epic created successfully', {
+        epicId: createdEpic.epicId,
+        projectUrl: createdEpic.projectUrl,
+        taskCount: createdEpic.tasks.length,
+      });
+
+      // Store in context
+      if (context) {
+        (context as any).hiveMindOrchestrator = orchestrator;
+        (context as any).activeEpicId = createdEpic.epicId;
+      }
+
+      return {
+        success: true,
+        epicId: createdEpic.epicId,
+        projectUrl: createdEpic.projectUrl,
+        projectNumber: createdEpic.projectNumber,
+        epicIssueNumber: createdEpic.epicIssueNumber,
+        epicIssueUrl: createdEpic.epicIssueUrl,
+        tasks: createdEpic.tasks.map(t => ({
+          taskId: t.taskId,
+          issueNumber: t.issueNumber,
+          issueUrl: t.issueUrl,
+          title: t.title,
+          phase: t.phase,
+          status: t.status,
+        })),
+        summary: {
+          totalTasks: createdEpic.tasks.length,
+          adrsIncluded: input.architecture?.adrs?.length || 0,
+          componentsDocumented: input.architecture?.components?.length || 0,
+          userStoriesMapped: input.specification?.userStories?.length || 0,
+        },
+        message: `Teammate-style epic created with ${createdEpic.tasks.length} fully-contextualized tasks. Each issue contains architectural context, acceptance criteria, and implementation guidance. Agents can work autonomously with this context.`,
+        ctoGuidance: [
+          'Review the epic and tasks in GitHub Project',
+          'Issues contain full context - agents can work independently',
+          'Assign tasks to agents when ready for implementation',
+          'Agents will reference ADRs and architecture automatically',
+          'Use ctoflow/watch_assignments to monitor when work begins',
+          'Trust the agents - they have everything they need',
+        ],
+        timestamp: new Date().toISOString(),
+      };
+    },
+  };
+}
+
+/**
+ * Generate comprehensive epic body with all architectural context
+ */
+function generateTeammateEpicBody(input: any): string {
+  const sections: string[] = [];
+
+  // Header
+  sections.push(`# ${input.epicTitle}\n`);
+  sections.push(input.epicDescription + '\n');
+
+  // Overview section
+  sections.push('## 📋 Overview\n');
+  sections.push('This epic was generated through the SPARC methodology with full architectural planning.\n');
+
+  // Requirements
+  if (input.specification?.requirements?.length > 0) {
+    sections.push('## ✅ Requirements\n');
+    input.specification.requirements.forEach((req: string, i: number) => {
+      sections.push(`${i + 1}. ${req}`);
+    });
+    sections.push('');
+  }
+
+  // User Stories
+  if (input.specification?.userStories?.length > 0) {
+    sections.push('## 📖 User Stories\n');
+    input.specification.userStories.forEach((story: any) => {
+      sections.push(`### ${story.title}`);
+      sections.push(`*Priority: ${story.priority}*\n`);
+      sections.push(story.description + '\n');
+      if (story.acceptanceCriteria?.length > 0) {
+        sections.push('**Acceptance Criteria:**');
+        story.acceptanceCriteria.forEach((ac: string) => {
+          sections.push(`- [ ] ${ac}`);
+        });
+        sections.push('');
+      }
+    });
+  }
+
+  // Architecture Overview
+  if (input.architecture?.systemDesign) {
+    sections.push('## 🏗️ Architecture\n');
+    sections.push(input.architecture.systemDesign + '\n');
+  }
+
+  // Components
+  if (input.architecture?.components?.length > 0) {
+    sections.push('### Components\n');
+    sections.push('| Component | Responsibility | Dependencies |');
+    sections.push('|-----------|----------------|--------------|');
+    input.architecture.components.forEach((comp: any) => {
+      const deps = comp.dependencies?.join(', ') || 'None';
+      sections.push(`| ${comp.name} | ${comp.responsibility} | ${deps} |`);
+    });
+    sections.push('');
+  }
+
+  // Design Patterns
+  if (input.architecture?.patterns?.length > 0) {
+    sections.push('### Design Patterns\n');
+    input.architecture.patterns.forEach((pattern: string) => {
+      sections.push(`- ${pattern}`);
+    });
+    sections.push('');
+  }
+
+  // ADRs
+  if (input.architecture?.adrs?.length > 0) {
+    sections.push('## 📝 Architectural Decision Records\n');
+    input.architecture.adrs.forEach((adr: any) => {
+      sections.push(`### ADR-${adr.id}: ${adr.title}\n`);
+      sections.push(`**Context:** ${adr.context}\n`);
+      sections.push(`**Decision:** ${adr.decision}\n`);
+      if (adr.consequences?.length > 0) {
+        sections.push('**Consequences:**');
+        adr.consequences.forEach((c: string) => sections.push(`- ${c}`));
+        sections.push('');
+      }
+    });
+  }
+
+  // Constraints
+  if (input.specification?.constraints) {
+    sections.push('## ⚠️ Constraints\n');
+    if (input.specification.constraints.technical?.length > 0) {
+      sections.push('**Technical:**');
+      input.specification.constraints.technical.forEach((c: string) => {
+        sections.push(`- ${c}`);
+      });
+      sections.push('');
+    }
+    if (input.specification.constraints.business?.length > 0) {
+      sections.push('**Business:**');
+      input.specification.constraints.business.forEach((c: string) => {
+        sections.push(`- ${c}`);
+      });
+      sections.push('');
+    }
+  }
+
+  // Risks
+  if (input.specification?.risks?.length > 0) {
+    sections.push('## 🚨 Risks\n');
+    input.specification.risks.forEach((risk: any) => {
+      sections.push(`- **${risk.severity.toUpperCase()}**: ${risk.description}`);
+      sections.push(`  - *Mitigation:* ${risk.mitigation}`);
+    });
+    sections.push('');
+  }
+
+  // Task Overview
+  if (input.implementation?.tasks?.length > 0) {
+    sections.push('## 📦 Implementation Tasks\n');
+    sections.push(`This epic contains ${input.implementation.tasks.length} tasks across SPARC phases.\n`);
+
+    // Group by phase
+    const phases = ['Specification', 'Pseudocode', 'Architecture', 'Refinement', 'Completion'];
+    phases.forEach(phase => {
+      const phaseTasks = input.implementation.tasks.filter((t: any) => t.phase === phase);
+      if (phaseTasks.length > 0) {
+        sections.push(`**${phase}:** ${phaseTasks.length} tasks`);
+      }
+    });
+    sections.push('');
+  }
+
+  // Footer
+  sections.push('---');
+  sections.push('*Generated by CTO Flow - Teammate-style epic management*');
+  sections.push('*Agents can work autonomously with this context*');
+
+  return sections.join('\n');
+}
+
+/**
+ * Generate comprehensive task body with implementation context
+ */
+function generateTeammateTaskBody(task: any, epicInput: any): string {
+  const sections: string[] = [];
+
+  // Description
+  sections.push(task.description + '\n');
+
+  // Component context
+  if (task.component) {
+    const component = epicInput.architecture?.components?.find((c: any) => c.name === task.component);
+    if (component) {
+      sections.push('## 🏗️ Component Context\n');
+      sections.push(`**Component:** ${component.name}`);
+      sections.push(`**Responsibility:** ${component.responsibility}`);
+      if (component.interfaces?.length > 0) {
+        sections.push(`**Interfaces:** ${component.interfaces.join(', ')}`);
+      }
+      sections.push('');
+    }
+  }
+
+  // Implementation Notes
+  if (task.implementationNotes) {
+    sections.push('## 💡 Implementation Guidance\n');
+    sections.push(task.implementationNotes + '\n');
+  }
+
+  // Files to modify
+  if (task.files?.length > 0) {
+    sections.push('## 📁 Files\n');
+    task.files.forEach((file: string) => {
+      sections.push(`- \`${file}\``);
+    });
+    sections.push('');
+  }
+
+  // Acceptance Criteria
+  if (task.acceptanceCriteria?.length > 0) {
+    sections.push('## ✅ Acceptance Criteria\n');
+    task.acceptanceCriteria.forEach((ac: string) => {
+      sections.push(`- [ ] ${ac}`);
+    });
+    sections.push('');
+  }
+
+  // Test Strategy
+  if (task.testStrategy) {
+    sections.push('## 🧪 Test Strategy\n');
+    sections.push(task.testStrategy + '\n');
+  }
+
+  // Related ADRs
+  if (task.relatedAdrs?.length > 0 && epicInput.architecture?.adrs?.length > 0) {
+    sections.push('## 📝 Related Architectural Decisions\n');
+    task.relatedAdrs.forEach((adrId: string) => {
+      const adr = epicInput.architecture.adrs.find((a: any) => a.id === adrId);
+      if (adr) {
+        sections.push(`### ADR-${adr.id}: ${adr.title}`);
+        sections.push(`**Decision:** ${adr.decision}\n`);
+      }
+    });
+  }
+
+  // Design Patterns to use
+  if (epicInput.architecture?.patterns?.length > 0) {
+    sections.push('## 🎨 Design Patterns\n');
+    sections.push('Follow these patterns established for this project:');
+    epicInput.architecture.patterns.slice(0, 5).forEach((pattern: string) => {
+      sections.push(`- ${pattern}`);
+    });
+    sections.push('');
+  }
+
+  // Dependencies
+  if (task.dependencies?.length > 0) {
+    sections.push('## 🔗 Dependencies\n');
+    sections.push('This task depends on:');
+    task.dependencies.forEach((dep: string) => {
+      sections.push(`- ${dep}`);
+    });
+    sections.push('');
+  }
+
+  // Technical constraints relevant to this task
+  if (epicInput.specification?.constraints?.technical?.length > 0) {
+    sections.push('## ⚠️ Technical Constraints\n');
+    epicInput.specification.constraints.technical.slice(0, 5).forEach((c: string) => {
+      sections.push(`- ${c}`);
+    });
+    sections.push('');
+  }
+
+  // Footer
+  sections.push('---');
+  sections.push(`*Phase: ${task.phase} | Priority: ${task.priority || 'medium'} | Est: ${task.estimatedHours || '?'}h*`);
+
+  return sections.join('\n');
+}
+
+// CTO Workflow field name - custom field with Backlog/Ready/In Progress/Review/Done
+const CTO_WORKFLOW_FIELD_NAME = 'CTO Workflow';
+
+/**
+ * Helper: Get Project Workflow Field and Options
+ *
+ * Retrieves the CTO Workflow field (or falls back to Status) ID and option IDs.
+ * Prefers "CTO Workflow" custom field which has Backlog/Ready/In Progress/Review/Done.
+ */
+async function getProjectStatusField(
+  graphql: any,
+  owner: string,
+  projectNumber: number
+): Promise<{
+  projectId: string;
+  fieldId: string;
+  fieldName: string;
+  options: { id: string; name: string }[];
+} | null> {
+  const query = `
+    query($owner: String!, $number: Int!) {
+      user(login: $owner) {
+        projectV2(number: $number) {
+          id
+          fields(first: 20) {
+            nodes {
+              ... on ProjectV2SingleSelectField {
+                id
+                name
+                options {
+                  id
+                  name
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const findWorkflowField = (fields: any[]) => {
+    // Prefer CTO Workflow field
+    const ctoWorkflow = fields.find(
+      (f: any) => f.name === CTO_WORKFLOW_FIELD_NAME && f.options
+    );
+    if (ctoWorkflow) return ctoWorkflow;
+
+    // Fall back to Status field
+    return fields.find((f: any) => f.name === 'Status' && f.options);
+  };
+
+  try {
+    const result: any = await graphql(query, { owner, number: projectNumber });
+    const project = result.user?.projectV2;
+    if (!project) return null;
+
+    const workflowField = findWorkflowField(project.fields.nodes);
+    if (!workflowField) return null;
+
+    return {
+      projectId: project.id,
+      fieldId: workflowField.id,
+      fieldName: workflowField.name,
+      options: workflowField.options,
+    };
+  } catch {
+    // Try organization
+    const orgQuery = query.replace('user(login: $owner)', 'organization(login: $owner)');
+    try {
+      const result: any = await graphql(orgQuery, { owner, number: projectNumber });
+      const project = result.organization?.projectV2;
+      if (!project) return null;
+
+      const workflowField = findWorkflowField(project.fields.nodes);
+      if (!workflowField) return null;
+
+      return {
+        projectId: project.id,
+        fieldId: workflowField.id,
+        fieldName: workflowField.name,
+        options: workflowField.options,
+      };
+    } catch {
+      return null;
+    }
+  }
+}
+
+/**
+ * Helper: Get Project Item ID for an Issue
+ */
+async function getProjectItemId(
+  graphql: any,
+  projectId: string,
+  issueNumber: number,
+  owner: string,
+  repo: string
+): Promise<{ itemId: string; currentStatus: string | null } | null> {
+  const query = `
+    query($projectId: ID!) {
+      node(id: $projectId) {
+        ... on ProjectV2 {
+          items(first: 100) {
+            nodes {
+              id
+              fieldValues(first: 10) {
+                nodes {
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    field { ... on ProjectV2SingleSelectField { name } }
+                    name
+                  }
+                }
+              }
+              content {
+                ... on Issue {
+                  number
+                  repository {
+                    name
+                    owner { login }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const result: any = await graphql(query, { projectId });
+  const items = result.node?.items?.nodes || [];
+
+  for (const item of items) {
+    const issue = item.content;
+    if (
+      issue?.number === issueNumber &&
+      issue?.repository?.name === repo &&
+      issue?.repository?.owner?.login === owner
+    ) {
+      // Get current status from CTO Workflow field (or Status as fallback)
+      const statusValue = item.fieldValues?.nodes?.find(
+        (fv: any) => fv.field?.name === CTO_WORKFLOW_FIELD_NAME || fv.field?.name === 'Status'
+      );
+      return {
+        itemId: item.id,
+        currentStatus: statusValue?.name || null,
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Helper: Update Project Item Status
+ */
+async function updateProjectItemStatus(
+  graphql: any,
+  projectId: string,
+  itemId: string,
+  fieldId: string,
+  optionId: string
+): Promise<void> {
+  const mutation = `
+    mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+      updateProjectV2ItemFieldValue(input: {
+        projectId: $projectId,
+        itemId: $itemId,
+        fieldId: $fieldId,
+        value: { singleSelectOptionId: $optionId }
+      }) {
+        projectV2Item { id }
+      }
+    }
+  `;
+
+  await graphql(mutation, { projectId, itemId, fieldId, optionId });
+}
+
+/**
+ * CTO Flow: Release Task for Work
+ *
+ * Tasks are auto-assigned to the best agent during epic creation,
+ * but they start in 'Backlog' or 'Todo' status. The CTO must explicitly
+ * move tasks to 'Ready' status before agents can start working.
+ *
+ * Uses GitHub Projects v2 Status field for workflow control.
+ */
+function createCTOFlowReleaseTaskTool(logger: ILogger): MCPTool {
+  return {
+    name: 'ctoflow/release_task',
+    description: `Release tasks for agent work by moving them to 'Ready' status in GitHub Project.
+
+Tasks are auto-assigned to the best agent during epic creation but start
+in 'Backlog' or 'Todo'. Use this tool to move tasks to 'Ready' when you're
+ready for agents to begin work.
+
+Changes the GitHub Project Status field to 'Ready'.
+Agents can only pick up tasks that are in 'Ready' status.
+
+This gives you control over when work starts while keeping optimal agent assignment.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'GitHub owner (user or organization)',
+        },
+        repo: {
+          type: 'string',
+          description: 'GitHub repository name',
+        },
+        projectNumber: {
+          type: 'number',
+          description: 'GitHub Project number',
+        },
+        issueNumbers: {
+          type: 'array',
+          items: { type: 'number' },
+          description: 'Issue numbers to release (can release multiple at once)',
+        },
+        targetStatus: {
+          type: 'string',
+          description: 'Status to move tasks to (default: Ready)',
+          default: 'Ready',
+        },
+        notes: {
+          type: 'string',
+          description: 'Optional notes to add as a comment when releasing',
+        },
+      },
+      required: ['owner', 'repo', 'projectNumber', 'issueNumbers'],
+    },
+    handler: async (input: any, context?: ClaudeFlowToolContext) => {
+      logger.info('CTO Flow: Releasing tasks for work', {
+        repo: `${input.owner}/${input.repo}`,
+        projectNumber: input.projectNumber,
+        issueCount: input.issueNumbers.length,
+        sessionId: context?.sessionId,
+      });
+
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) {
+        return {
+          success: false,
+          error: 'GITHUB_TOKEN not set',
+          message: 'Set GITHUB_TOKEN environment variable to use CTO Flow',
+        };
+      }
+
+      const { Octokit } = await import('@octokit/rest');
+      const { graphql } = await import('@octokit/graphql');
+      const octokit = new Octokit({ auth: token });
+      const graphqlWithAuth = graphql.defaults({ headers: { authorization: `token ${token}` } });
+
+      const results: any[] = [];
+      const targetStatus = input.targetStatus || 'Ready';
+
+      try {
+        // Get project status field info
+        const statusField = await getProjectStatusField(
+          graphqlWithAuth,
+          input.owner,
+          input.projectNumber
+        );
+
+        if (!statusField) {
+          return {
+            success: false,
+            error: 'Could not find project or Status field',
+            message: `Make sure project #${input.projectNumber} exists and has a Status field`,
+          };
+        }
+
+        // Find the target status option
+        const targetOption = statusField.options.find(
+          (opt) => opt.name.toLowerCase() === targetStatus.toLowerCase()
+        );
+
+        if (!targetOption) {
+          return {
+            success: false,
+            error: `Status option '${targetStatus}' not found`,
+            availableOptions: statusField.options.map((o) => o.name),
+            message: `Available status options: ${statusField.options.map((o) => o.name).join(', ')}`,
+          };
+        }
+
+        // Process each issue
+        for (const issueNumber of input.issueNumbers) {
+          try {
+            // Get issue details
+            const issue = await octokit.issues.get({
+              owner: input.owner,
+              repo: input.repo,
+              issue_number: issueNumber,
+            });
+
+            const labels = issue.data.labels.map((l: any) =>
+              typeof l === 'string' ? l : l.name
+            );
+            const assignedAgent = labels.find((l: string) => l.startsWith('agent:'))?.replace('agent:', '') || 'unknown';
+
+            // Get project item ID
+            const itemInfo = await getProjectItemId(
+              graphqlWithAuth,
+              statusField.projectId,
+              issueNumber,
+              input.owner,
+              input.repo
+            );
+
+            if (!itemInfo) {
+              results.push({
+                issueNumber,
+                status: 'failed',
+                error: 'Issue not found in project',
+              });
+              continue;
+            }
+
+            // Update project status
+            await updateProjectItemStatus(
+              graphqlWithAuth,
+              statusField.projectId,
+              itemInfo.itemId,
+              statusField.fieldId,
+              targetOption.id
+            );
+
+            // Add release comment if notes provided
+            if (input.notes) {
+              await octokit.issues.createComment({
+                owner: input.owner,
+                repo: input.repo,
+                issue_number: issueNumber,
+                body: `## 🚦 Task Released\n\n**Status**: ${targetStatus} (ready for \`${assignedAgent}\` agent)\n**Released**: ${new Date().toISOString()}\n\n${input.notes}\n\n---\n*Released via CTO Flow*`,
+              });
+            }
+
+            results.push({
+              issueNumber,
+              issueUrl: issue.data.html_url,
+              title: issue.data.title,
+              assignedAgent,
+              previousStatus: itemInfo.currentStatus,
+              newStatus: targetStatus,
+              status: 'released',
+            });
+          } catch (e: any) {
+            results.push({
+              issueNumber,
+              status: 'failed',
+              error: e.message,
+            });
+          }
+        }
+
+        const released = results.filter((r) => r.status === 'released');
+        const failed = results.filter((r) => r.status === 'failed');
+
+        return {
+          success: failed.length === 0,
+          released,
+          failed,
+          summary: {
+            total: input.issueNumbers.length,
+            releasedCount: released.length,
+            failedCount: failed.length,
+          },
+          message: `Released ${released.length} task(s) to '${targetStatus}' status.${failed.length > 0 ? ` ${failed.length} failed.` : ''}`,
+          nextSteps: [
+            'Agents can now pick up released tasks using ctoflow/my_assignments',
+            'Tasks will appear in the Ready column of your GitHub Project',
+            'Monitor progress by watching the Project board',
+          ],
+        };
+      } catch (error: any) {
+        logger.error('CTO Flow: Failed to release tasks', { error: error.message });
+        return {
+          success: false,
+          error: error.message,
+          results,
+        };
+      }
+    },
+  };
+}
+
+/**
+ * CTO Flow: Assign Agent to Task (Label-Based)
+ *
+ * Since agents aren't GitHub users, we use labels for assignment:
+ * - `assigned:coder` - Assigned to coder agent
+ * - `assigned:architect` - Assigned to architect agent
+ * - `assigned:tester` - Assigned to tester agent
+ * etc.
+ *
+ * The CTO reviews tasks and assigns them by adding the appropriate label.
+ */
+function createCTOFlowAssignAgentTool(logger: ILogger): MCPTool {
+  return {
+    name: 'ctoflow/assign_agent',
+    description: `Manually assign or reassign an agent to a task.
+
+Note: Tasks are auto-assigned to the best agent during epic creation.
+Use this only if you want to override the automatic assignment.
+
+Changes:
+- Adds \`agent:{agent-type}\` label to the issue
+- Removes any existing agent assignment
+- Task remains in current status (pending-approval or ready)
+
+Agent types: coder, architect, tester, reviewer, researcher, devops, security`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'GitHub owner (user or organization)',
+        },
+        repo: {
+          type: 'string',
+          description: 'GitHub repository name',
+        },
+        issueNumber: {
+          type: 'number',
+          description: 'Issue number to assign',
+        },
+        agentType: {
+          type: 'string',
+          description: 'Agent type to assign (coder, architect, tester, reviewer, researcher, devops, security)',
+          enum: ['coder', 'architect', 'tester', 'reviewer', 'researcher', 'devops', 'security'],
+        },
+        notes: {
+          type: 'string',
+          description: 'Optional assignment notes to add as a comment',
+        },
+      },
+      required: ['owner', 'repo', 'issueNumber', 'agentType'],
+    },
+    handler: async (input: any, context?: ClaudeFlowToolContext) => {
+      logger.info('CTO Flow: Assigning agent to task', {
+        repo: `${input.owner}/${input.repo}`,
+        issueNumber: input.issueNumber,
+        agentType: input.agentType,
+        sessionId: context?.sessionId,
+      });
+
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) {
+        return {
+          success: false,
+          error: 'GITHUB_TOKEN not set',
+          message: 'Set GITHUB_TOKEN environment variable to use CTO Flow',
+        };
+      }
+
+      const { Octokit } = await import('@octokit/rest');
+      const octokit = new Octokit({ auth: token });
+
+      try {
+        // Ensure assignment labels exist
+        const assignmentLabels = [
+          { name: `assigned:${input.agentType}`, color: '28a745', description: `Assigned to ${input.agentType} agent` },
+          { name: 'status:ready', color: '0366d6', description: 'Task is ready for agent pickup' },
+          { name: 'status:unassigned', color: 'e4e669', description: 'Task awaiting assignment' },
+        ];
+
+        for (const label of assignmentLabels) {
+          try {
+            await octokit.issues.createLabel({
+              owner: input.owner,
+              repo: input.repo,
+              name: label.name,
+              color: label.color,
+              description: label.description,
+            });
+          } catch (e: any) {
+            // Label already exists, that's fine
+            if (e.status !== 422) throw e;
+          }
+        }
+
+        // Get current issue labels
+        const issue = await octokit.issues.get({
+          owner: input.owner,
+          repo: input.repo,
+          issue_number: input.issueNumber,
+        });
+
+        const currentLabels = issue.data.labels.map((l: any) =>
+          typeof l === 'string' ? l : l.name
+        );
+
+        // Remove any existing assignment labels and status:unassigned
+        const labelsToRemove = currentLabels.filter((l: string) =>
+          l.startsWith('assigned:') || l === 'status:unassigned'
+        );
+
+        // Build new label set
+        const newLabels = currentLabels
+          .filter((l: string) => !labelsToRemove.includes(l))
+          .concat([`assigned:${input.agentType}`, 'status:ready']);
+
+        // Update labels
+        await octokit.issues.setLabels({
+          owner: input.owner,
+          repo: input.repo,
+          issue_number: input.issueNumber,
+          labels: newLabels,
+        });
+
+        // Add assignment comment if notes provided
+        if (input.notes) {
+          await octokit.issues.createComment({
+            owner: input.owner,
+            repo: input.repo,
+            issue_number: input.issueNumber,
+            body: `## 🎯 Assignment Notes\n\n**Assigned to**: \`${input.agentType}\` agent\n\n${input.notes}\n\n---\n*Assignment made via CTO Flow*`,
+          });
+        }
+
+        return {
+          success: true,
+          issueNumber: input.issueNumber,
+          issueUrl: issue.data.html_url,
+          assignedTo: input.agentType,
+          labels: newLabels,
+          message: `Task #${input.issueNumber} assigned to ${input.agentType} agent. Agent can now pick up this task using ctoflow/my_assignments.`,
+        };
+      } catch (error: any) {
+        logger.error('CTO Flow: Failed to assign agent', { error: error.message });
+        return {
+          success: false,
+          error: error.message,
+          message: 'Failed to assign agent to task',
+        };
+      }
+    },
+  };
+}
+
+/**
+ * CTO Flow: Get My Assignments (Agent's View)
+ *
+ * Agent calls this to see what tasks have been assigned to them.
+ * Tasks are auto-assigned via `agent:{type}` label during epic creation.
+ * Uses GitHub Project Status field to determine if tasks are ready for work.
+ */
+function createCTOFlowMyAssignmentsTool(logger: ILogger): MCPTool {
+  return {
+    name: 'ctoflow/my_assignments',
+    description: `Get tasks assigned to a specific agent type that are ready for work.
+
+Tasks are auto-assigned to the best agent during epic creation (agent:{type} label).
+Uses GitHub Project board Status to determine availability:
+- 'Ready' status = available for agent to claim
+- 'In Progress' status = already being worked on
+- Other statuses = not yet released by CTO
+
+Example: coder agent calls this → returns issues with \`agent:coder\` in 'Ready' status`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'GitHub owner (user or organization)',
+        },
+        repo: {
+          type: 'string',
+          description: 'GitHub repository name',
+        },
+        projectNumber: {
+          type: 'number',
+          description: 'GitHub Project number',
+        },
+        agentType: {
+          type: 'string',
+          description: 'Agent type to check assignments for',
+          enum: ['coder', 'architect', 'tester', 'reviewer', 'researcher', 'devops', 'security'],
+        },
+        readyStatus: {
+          type: 'string',
+          description: 'Project status that indicates task is ready (default: Ready)',
+          default: 'Ready',
+        },
+        includeInProgress: {
+          type: 'boolean',
+          description: 'Also include tasks already in progress',
+          default: false,
+        },
+      },
+      required: ['owner', 'repo', 'projectNumber', 'agentType'],
+    },
+    handler: async (input: any, context?: ClaudeFlowToolContext) => {
+      logger.info('CTO Flow: Getting assignments for agent', {
+        repo: `${input.owner}/${input.repo}`,
+        projectNumber: input.projectNumber,
+        agentType: input.agentType,
+        sessionId: context?.sessionId,
+      });
+
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) {
+        return {
+          success: false,
+          error: 'GITHUB_TOKEN not set',
+        };
+      }
+
+      const { Octokit } = await import('@octokit/rest');
+      const { graphql } = await import('@octokit/graphql');
+      const octokit = new Octokit({ auth: token });
+      const graphqlWithAuth = graphql.defaults({ headers: { authorization: `token ${token}` } });
+
+      const readyStatus = input.readyStatus || 'Ready';
+      const agentLabel = `agent:${input.agentType}`;
+
+      try {
+        // Get project status field info
+        const statusField = await getProjectStatusField(
+          graphqlWithAuth,
+          input.owner,
+          input.projectNumber
+        );
+
+        if (!statusField) {
+          return {
+            success: false,
+            error: 'Could not find project or Status field',
+          };
+        }
+
+        // Query all project items with their status
+        const query = `
+          query($projectId: ID!) {
+            node(id: $projectId) {
+              ... on ProjectV2 {
+                items(first: 100) {
+                  nodes {
+                    id
+                    fieldValues(first: 10) {
+                      nodes {
+                        ... on ProjectV2ItemFieldSingleSelectValue {
+                          field { ... on ProjectV2SingleSelectField { name } }
+                          name
+                        }
+                      }
+                    }
+                    content {
+                      ... on Issue {
+                        number
+                        title
+                        url
+                        state
+                        createdAt
+                        labels(first: 20) {
+                          nodes { name }
+                        }
+                        repository {
+                          name
+                          owner { login }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        `;
+
+        const result: any = await graphqlWithAuth(query, { projectId: statusField.projectId });
+        const items = result.node?.items?.nodes || [];
+
+        const readyTasks: any[] = [];
+        const inProgressTasks: any[] = [];
+        const pendingTasks: any[] = [];
+
+        for (const item of items) {
+          const issue = item.content;
+          if (!issue || issue.state !== 'OPEN') continue;
+          if (issue.repository?.name !== input.repo) continue;
+          if (issue.repository?.owner?.login !== input.owner) continue;
+
+          const labels = issue.labels?.nodes?.map((l: any) => l.name) || [];
+
+          // Check if assigned to this agent type
+          if (!labels.includes(agentLabel)) continue;
+
+          // Get status from CTO Workflow field (or Status as fallback)
+          const statusValue = item.fieldValues?.nodes?.find(
+            (fv: any) => fv.field?.name === CTO_WORKFLOW_FIELD_NAME || fv.field?.name === 'Status'
+          );
+          const projectStatus = statusValue?.name || 'No Status';
+
+          const taskInfo = {
+            issueNumber: issue.number,
+            issueUrl: issue.url,
+            title: issue.title,
+            projectStatus,
+            labels,
+            createdAt: issue.createdAt,
+            phase: labels.find((l: string) => l.startsWith('sparc:'))?.replace('sparc:', '') || 'unknown',
+            priority: labels.find((l: string) => l.startsWith('priority:'))?.replace('priority:', '') || 'medium',
+          };
+
+          // Categorize by project status
+          if (projectStatus.toLowerCase() === readyStatus.toLowerCase()) {
+            readyTasks.push(taskInfo);
+          } else if (projectStatus.toLowerCase() === 'in progress') {
+            inProgressTasks.push(taskInfo);
+          } else {
+            pendingTasks.push(taskInfo);
+          }
+        }
+
+        return {
+          success: true,
+          agentType: input.agentType,
+          projectNumber: input.projectNumber,
+          readyCount: readyTasks.length,
+          inProgressCount: inProgressTasks.length,
+          pendingCount: pendingTasks.length,
+          readyTasks,
+          inProgressTasks: input.includeInProgress ? inProgressTasks : [],
+          pendingTasks,
+          message: readyTasks.length > 0
+            ? `You have ${readyTasks.length} task(s) in '${readyStatus}' status. Use ctoflow/claim_task to start.`
+            : pendingTasks.length > 0
+              ? `${pendingTasks.length} task(s) assigned but not yet in '${readyStatus}' status. Wait for CTO to move them.`
+              : 'No tasks currently assigned to you.',
+          nextSteps: readyTasks.length > 0
+            ? [
+                `Claim task #${readyTasks[0].issueNumber} using ctoflow/claim_task`,
+                'Read the full issue for context and acceptance criteria',
+                'Implement the solution following the architectural guidelines',
+                'Create a PR and mark task complete',
+              ]
+            : [`Wait for CTO to move tasks to '${readyStatus}' status in the Project board`],
+        };
+      } catch (error: any) {
+        logger.error('CTO Flow: Failed to get assignments', { error: error.message });
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+    },
+  };
+}
+
+/**
+ * CTO Flow: Claim Task (Start Working)
+ *
+ * Agent claims an assigned task, changing Project board status to 'In Progress'.
+ * Uses GitHub Projects v2 Status field for workflow control.
+ */
+function createCTOFlowClaimTaskTool(logger: ILogger): MCPTool {
+  return {
+    name: 'ctoflow/claim_task',
+    description: `Claim an assigned task and start working on it.
+
+Changes the GitHub Project Status to 'In Progress' and adds a comment.
+Task must be in 'Ready' status (released by CTO) before it can be claimed.
+
+Use this when you're ready to start working on an assigned task.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'GitHub owner (user or organization)',
+        },
+        repo: {
+          type: 'string',
+          description: 'GitHub repository name',
+        },
+        projectNumber: {
+          type: 'number',
+          description: 'GitHub Project number',
+        },
+        issueNumber: {
+          type: 'number',
+          description: 'Issue number to claim',
+        },
+        agentType: {
+          type: 'string',
+          description: 'Agent type claiming the task',
+          enum: ['coder', 'architect', 'tester', 'reviewer', 'researcher', 'devops', 'security'],
+        },
+        approach: {
+          type: 'string',
+          description: 'Brief description of planned implementation approach',
+        },
+        readyStatus: {
+          type: 'string',
+          description: 'Status that indicates task is ready (default: Ready)',
+          default: 'Ready',
+        },
+        inProgressStatus: {
+          type: 'string',
+          description: 'Status to set when claiming (default: In Progress)',
+          default: 'In Progress',
+        },
+      },
+      required: ['owner', 'repo', 'projectNumber', 'issueNumber', 'agentType'],
+    },
+    handler: async (input: any, context?: ClaudeFlowToolContext) => {
+      logger.info('CTO Flow: Claiming task', {
+        repo: `${input.owner}/${input.repo}`,
+        projectNumber: input.projectNumber,
+        issueNumber: input.issueNumber,
+        agentType: input.agentType,
+        sessionId: context?.sessionId,
+      });
+
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) {
+        return {
+          success: false,
+          error: 'GITHUB_TOKEN not set',
+        };
+      }
+
+      const { Octokit } = await import('@octokit/rest');
+      const { graphql } = await import('@octokit/graphql');
+      const octokit = new Octokit({ auth: token });
+      const graphqlWithAuth = graphql.defaults({ headers: { authorization: `token ${token}` } });
+
+      const readyStatus = input.readyStatus || 'Ready';
+      const inProgressStatus = input.inProgressStatus || 'In Progress';
+
+      try {
+        // Get project status field info
+        const statusField = await getProjectStatusField(
+          graphqlWithAuth,
+          input.owner,
+          input.projectNumber
+        );
+
+        if (!statusField) {
+          return {
+            success: false,
+            error: 'Could not find project or Status field',
+          };
+        }
+
+        // Find the In Progress status option
+        const inProgressOption = statusField.options.find(
+          (opt) => opt.name.toLowerCase() === inProgressStatus.toLowerCase()
+        );
+
+        if (!inProgressOption) {
+          return {
+            success: false,
+            error: `Status option '${inProgressStatus}' not found`,
+            availableOptions: statusField.options.map((o) => o.name),
+          };
+        }
+
+        // Get issue details
+        const issue = await octokit.issues.get({
+          owner: input.owner,
+          repo: input.repo,
+          issue_number: input.issueNumber,
+        });
+
+        const labels = issue.data.labels.map((l: any) =>
+          typeof l === 'string' ? l : l.name
+        );
+
+        // Verify task is assigned to this agent
+        if (!labels.includes(`agent:${input.agentType}`)) {
+          return {
+            success: false,
+            error: `Task is not assigned to ${input.agentType} agent`,
+            currentAssignment: labels.find((l: string) => l.startsWith('agent:'))?.replace('agent:', '') || 'unassigned',
+          };
+        }
+
+        // Get project item and current status
+        const itemInfo = await getProjectItemId(
+          graphqlWithAuth,
+          statusField.projectId,
+          input.issueNumber,
+          input.owner,
+          input.repo
+        );
+
+        if (!itemInfo) {
+          return {
+            success: false,
+            error: 'Issue not found in project',
+          };
+        }
+
+        // Verify task is in Ready status
+        if (itemInfo.currentStatus?.toLowerCase() !== readyStatus.toLowerCase()) {
+          return {
+            success: false,
+            error: `Task is not in '${readyStatus}' status. Current status: '${itemInfo.currentStatus}'`,
+            message: `Wait for CTO to move task to '${readyStatus}' in the Project board`,
+          };
+        }
+
+        // Update project status to In Progress
+        await updateProjectItemStatus(
+          graphqlWithAuth,
+          statusField.projectId,
+          itemInfo.itemId,
+          statusField.fieldId,
+          inProgressOption.id
+        );
+
+        // Add work started comment
+        const approachSection = input.approach
+          ? `\n\n**Planned Approach:**\n${input.approach}`
+          : '';
+
+        await octokit.issues.createComment({
+          owner: input.owner,
+          repo: input.repo,
+          issue_number: input.issueNumber,
+          body: `## 🚀 Work Started\n\n**Agent**: \`${input.agentType}\`\n**Started**: ${new Date().toISOString()}${approachSection}\n\n---\n*Task claimed via CTO Flow*`,
+        });
+
+        return {
+          success: true,
+          issueNumber: input.issueNumber,
+          issueUrl: issue.data.html_url,
+          claimedBy: input.agentType,
+          previousStatus: itemInfo.currentStatus,
+          newStatus: inProgressStatus,
+          message: `Task #${input.issueNumber} claimed. You are now working on: "${issue.data.title}"`,
+          nextSteps: [
+            'Read the full issue body for context and acceptance criteria',
+            'Follow the architectural guidelines in the issue',
+            'Implement the solution',
+            'Create a PR when ready',
+            'Use ctoflow/complete_task when done',
+          ],
+        };
+      } catch (error: any) {
+        logger.error('CTO Flow: Failed to claim task', { error: error.message });
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+    },
+  };
+}
+
+/**
+ * CTO Flow: Complete Task
+ *
+ * Agent marks a task as complete after finishing work.
+ * Uses GitHub Projects v2 Status field for workflow control.
+ */
+function createCTOFlowCompleteTaskTool(logger: ILogger): MCPTool {
+  return {
+    name: 'ctoflow/complete_task',
+    description: `Mark a task as complete after finishing work.
+
+Changes the GitHub Project Status to 'Done' and adds a completion comment.
+Optionally links a PR and closes the issue.
+
+Use this when you've finished implementing and are ready for review.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: {
+          type: 'string',
+          description: 'GitHub owner (user or organization)',
+        },
+        repo: {
+          type: 'string',
+          description: 'GitHub repository name',
+        },
+        projectNumber: {
+          type: 'number',
+          description: 'GitHub Project number',
+        },
+        issueNumber: {
+          type: 'number',
+          description: 'Issue number to complete',
+        },
+        agentType: {
+          type: 'string',
+          description: 'Agent type completing the task',
+          enum: ['coder', 'architect', 'tester', 'reviewer', 'researcher', 'devops', 'security'],
+        },
+        prNumber: {
+          type: 'number',
+          description: 'PR number if implementation created a PR',
+        },
+        summary: {
+          type: 'string',
+          description: 'Brief summary of what was implemented',
+        },
+        closeIssue: {
+          type: 'boolean',
+          description: 'Whether to close the issue',
+          default: false,
+        },
+        doneStatus: {
+          type: 'string',
+          description: 'Status to set when complete (default: Done)',
+          default: 'Done',
+        },
+      },
+      required: ['owner', 'repo', 'projectNumber', 'issueNumber', 'agentType'],
+    },
+    handler: async (input: any, context?: ClaudeFlowToolContext) => {
+      logger.info('CTO Flow: Completing task', {
+        repo: `${input.owner}/${input.repo}`,
+        projectNumber: input.projectNumber,
+        issueNumber: input.issueNumber,
+        agentType: input.agentType,
+        sessionId: context?.sessionId,
+      });
+
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) {
+        return {
+          success: false,
+          error: 'GITHUB_TOKEN not set',
+        };
+      }
+
+      const { Octokit } = await import('@octokit/rest');
+      const { graphql } = await import('@octokit/graphql');
+      const octokit = new Octokit({ auth: token });
+      const graphqlWithAuth = graphql.defaults({ headers: { authorization: `token ${token}` } });
+
+      const doneStatus = input.doneStatus || 'Done';
+
+      try {
+        // Get project status field info
+        const statusField = await getProjectStatusField(
+          graphqlWithAuth,
+          input.owner,
+          input.projectNumber
+        );
+
+        if (!statusField) {
+          return {
+            success: false,
+            error: 'Could not find project or Status field',
+          };
+        }
+
+        // Find the Done status option
+        const doneOption = statusField.options.find(
+          (opt) => opt.name.toLowerCase() === doneStatus.toLowerCase()
+        );
+
+        if (!doneOption) {
+          return {
+            success: false,
+            error: `Status option '${doneStatus}' not found`,
+            availableOptions: statusField.options.map((o) => o.name),
+          };
+        }
+
+        // Get issue details
+        const issue = await octokit.issues.get({
+          owner: input.owner,
+          repo: input.repo,
+          issue_number: input.issueNumber,
+        });
+
+        // Get project item and current status
+        const itemInfo = await getProjectItemId(
+          graphqlWithAuth,
+          statusField.projectId,
+          input.issueNumber,
+          input.owner,
+          input.repo
+        );
+
+        if (!itemInfo) {
+          return {
+            success: false,
+            error: 'Issue not found in project',
+          };
+        }
+
+        // Update project status to Done
+        await updateProjectItemStatus(
+          graphqlWithAuth,
+          statusField.projectId,
+          itemInfo.itemId,
+          statusField.fieldId,
+          doneOption.id
+        );
+
+        // Add completion comment
+        const prSection = input.prNumber
+          ? `\n**Pull Request**: #${input.prNumber}`
+          : '';
+        const summarySection = input.summary
+          ? `\n\n**Summary:**\n${input.summary}`
+          : '';
+
+        await octokit.issues.createComment({
+          owner: input.owner,
+          repo: input.repo,
+          issue_number: input.issueNumber,
+          body: `## ✅ Task Complete\n\n**Agent**: \`${input.agentType}\`\n**Completed**: ${new Date().toISOString()}${prSection}${summarySection}\n\n---\n*Task completed via CTO Flow*`,
+        });
+
+        // Close issue if requested
+        if (input.closeIssue) {
+          await octokit.issues.update({
+            owner: input.owner,
+            repo: input.repo,
+            issue_number: input.issueNumber,
+            state: 'closed',
+            state_reason: 'completed',
+          });
+        }
+
+        return {
+          success: true,
+          issueNumber: input.issueNumber,
+          issueUrl: issue.data.html_url,
+          completedBy: input.agentType,
+          previousStatus: itemInfo.currentStatus,
+          newStatus: doneStatus,
+          issueClosed: input.closeIssue || false,
+          prLinked: input.prNumber || null,
+          message: `Task #${input.issueNumber} marked '${doneStatus}'${input.closeIssue ? ' and closed' : ''}.`,
+        };
+      } catch (error: any) {
+        logger.error('CTO Flow: Failed to complete task', { error: error.message });
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
     },
   };
 }

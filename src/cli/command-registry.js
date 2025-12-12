@@ -24,6 +24,7 @@ import { hookSafetyCommand } from './simple-commands/hook-safety.js';
 import { hiveMindCommand } from './simple-commands/hive-mind.js';
 import { HelpFormatter } from './help-formatter.js';
 import hiveMindOptimizeCommand from './simple-commands/hive-mind-optimize.js';
+import { epicCommand, ctoFlowCommand, ctoProjectCommand } from './simple-commands/cto-flow.js';
 import { neuralCommand } from './simple-commands/neural.js';
 import { goalCommand } from './simple-commands/goal.js';
 import {
@@ -412,6 +413,84 @@ This command helps resolve issues where:
   • Task assignments are missing or incorrectly attributed
 
 Use 'swarm-metrics fix' to automatically repair attribution issues.`,
+  });
+
+  // CTO-Flow commands for epic and project management
+  commandRegistry.set('epic', {
+    handler: epicCommand,
+    description: '📋 Manage epics in CTO-Flow agent system',
+    usage: 'epic <subcommand> [options] --cto-flow-mode',
+    examples: [
+      'epic create "Auth System" --repo owner/repo --cto-flow-mode',
+      'epic list --repo owner/repo --cto-flow-mode',
+      'epic show <epic-id> --cto-flow-mode',
+    ],
+    details: `
+CTO-Flow Epic Management:
+  • Create and track epics across GitHub Projects V2
+  • Assign agents to epic tasks using 6-factor scoring
+  • Persist epic context for agent collaboration
+  • Integrate with SPARC methodology phases
+
+Subcommands:
+  create <title>     Create a new epic with GitHub Project
+  list               List all epics with status
+  show <epic-id>     Show epic details
+
+Options:
+  --cto-flow-mode    Enable CTO-Flow mode (required)
+  --repo owner/repo  GitHub repository (required for create)
+  --status <state>   Filter by state (list)
+`,
+  });
+
+  commandRegistry.set('cto-flow', {
+    handler: ctoFlowCommand,
+    description: '🔧 CTO-Flow context management and status',
+    usage: 'cto-flow <subcommand> [options] --cto-flow-mode',
+    examples: [
+      'cto-flow context-restore --epic <id> --cto-flow-mode',
+      'cto-flow status --cto-flow-mode',
+    ],
+    details: `
+CTO-Flow Context Management:
+  • Restore agent context from epic memory
+  • Check CTO-Flow mode status
+  • Manage persistent memory across sessions
+
+Subcommands:
+  context-restore    Restore epic context for an agent
+  status             Show CTO-Flow mode status
+
+Options:
+  --epic <id>        Epic ID to operate on
+  --cto-flow-mode    Enable CTO-Flow mode (required)
+`,
+  });
+
+  commandRegistry.set('cto-project', {
+    handler: ctoProjectCommand,
+    description: '📊 GitHub Projects V2 management for CTO-Flow',
+    usage: 'cto-project <subcommand> [options] --cto-flow-mode',
+    examples: [
+      'cto-project create <epic-id> "Project Title" --repo owner/repo --cto-flow-mode',
+      'cto-project progress <epic-id> --repo owner/repo --cto-flow-mode',
+    ],
+    details: `
+CTO-Flow GitHub Projects Integration:
+  • Create projects linked to epics
+  • Track progress with status field workflow
+  • Backlog → Ready → In Progress → Review → Done
+
+Subcommands:
+  create <epic-id> <title>    Create a GitHub Project for an epic
+  progress <epic-id>          View epic progress
+
+Options:
+  --repo owner/repo    GitHub repository (required)
+  --cto-flow-mode      Enable CTO-Flow mode (required)
+  --description "..."  Description for project
+`,
   });
 
   commandRegistry.set('batch', {
