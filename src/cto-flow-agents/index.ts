@@ -219,6 +219,19 @@ import {
   type PRCreationResult as PostWorkPRResult,
 } from './hooks/post-work-hook.js';
 
+// Post-Review Hook (handle review completion and follow-up tasks)
+import {
+  registerPostReviewHook,
+  unregisterPostReviewHook,
+  handleReviewComplete,
+  PostReviewHook,
+  type ReviewResult,
+  type ReviewerResult,
+  type CriticalIssue,
+  type PostReviewPayload,
+  type FollowUpTask,
+} from './hooks/post-review-hook.js';
+
 // SPARC to Epic Parser
 import {
   parseSparcOutput,
@@ -257,6 +270,36 @@ import {
   type TaskExecutionResult,
   type ProgressCallback,
 } from './workers/codespace-worker.js';
+
+// Advanced Task Routing (intelligent local/codespace task distribution)
+import {
+  AdvancedTaskRouter,
+  getRouter,
+  createRouter,
+  routeTask,
+  createTaskProfile,
+  DEFAULT_ROUTING_RULES,
+  type RoutingDecision,
+  type TaskProfile,
+  type RoutingRule,
+  type TaskType,
+  type ResourceRequirements,
+  type RoutingFactor,
+  type RoutingContext,
+} from './workers/advanced-routing.js';
+
+// Progress Tracker (epic velocity and health monitoring)
+import {
+  ProgressTracker,
+  createProgressTracker,
+  type ProgressTrackerConfig,
+  type EpicProgressState,
+  type TaskProgressEntry,
+  type VelocityMetrics,
+  type HealthStatus,
+  type HealthCategory,
+  type ProgressWebhook,
+} from './tracking/progress-tracker.js';
 
 // GitHub Webhook Server (for real-time issue assignment detection)
 import {
@@ -1466,6 +1509,25 @@ export type {
 };
 
 /**
+ * Post-Review Hook - Handle review completion and auto-create follow-up tasks
+ * Processes reviewer feedback, updates status, and creates issues for fixes
+ */
+export {
+  registerPostReviewHook,
+  unregisterPostReviewHook,
+  handleReviewComplete,
+  PostReviewHook,
+};
+
+export type {
+  ReviewResult,
+  ReviewerResult,
+  CriticalIssue,
+  PostReviewPayload,
+  FollowUpTask,
+};
+
+/**
  * SPARC to Epic Parser - Extract structured epic data from SPARC output
  * Parses specifications, architecture, and refinement phases into tasks
  */
@@ -1520,6 +1582,48 @@ export type {
   CodespaceState,
   TaskExecutionResult,
   ProgressCallback,
+};
+
+/**
+ * Advanced Task Routing - Intelligent local/codespace task distribution
+ * Routes tasks based on 12 default factors including GPU, security, memory, duration
+ */
+export {
+  AdvancedTaskRouter,
+  getRouter,
+  createRouter,
+  routeTask,
+  createTaskProfile,
+  DEFAULT_ROUTING_RULES,
+};
+
+export type {
+  RoutingDecision,
+  TaskProfile,
+  RoutingRule,
+  TaskType,
+  ResourceRequirements,
+  RoutingFactor,
+  RoutingContext,
+};
+
+/**
+ * Progress Tracker - Epic velocity and health monitoring
+ * Tracks task completion velocity, calculates estimates, and monitors health
+ */
+export {
+  ProgressTracker,
+  createProgressTracker,
+};
+
+export type {
+  ProgressTrackerConfig,
+  EpicProgressState,
+  TaskProgressEntry,
+  VelocityMetrics,
+  HealthStatus,
+  HealthCategory,
+  ProgressWebhook,
 };
 
 /**

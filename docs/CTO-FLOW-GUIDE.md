@@ -11,7 +11,12 @@ A workflow system for Claude-Flow that combines **Teammate Agents** (autonomous,
 5. [Teammate Agent Operations](#teammate-agent-operations)
 6. [SPARC-Informed Task Prompts](#sparc-informed-task-prompts)
 7. [CLI Commands Reference](#cli-commands-reference)
-8. [GraphQL Reference](#graphql-reference)
+8. [Dashboard & Monitoring](#dashboard--monitoring)
+9. [Advanced Task Routing](#advanced-task-routing)
+10. [Review Swarm & Auto-Merge](#review-swarm--auto-merge)
+11. [Worker Modes](#worker-modes)
+12. [Hooks System](#hooks-system)
+13. [GraphQL Reference](#graphql-reference)
 
 ---
 
@@ -579,3 +584,479 @@ curl -s -H "Authorization: bearer $TOKEN" \
 8. **Knowledge shared** with other teammates via epic memory
 
 **Teammates collaborate autonomously. SPARC structures their work. CTO-Flow tracks progress.**
+
+---
+
+## Dashboard & Monitoring
+
+The CTO-Flow dashboard provides real-time visibility into epic progress, team velocity, and system health.
+
+### Dashboard Commands
+
+```bash
+# Show dashboard overview
+npx claude-flow cto-project dashboard show <epic-id> --teammate-mode
+
+# View detailed progress metrics
+npx claude-flow cto-project dashboard progress <epic-id> --teammate-mode
+
+# Check system health
+npx claude-flow cto-project dashboard health <epic-id> --teammate-mode
+```
+
+### Progress Metrics
+
+The progress tracker monitors:
+
+| Metric | Description |
+|--------|-------------|
+| **Velocity** | Tasks completed per day/week |
+| **Throughput** | Issues moved through pipeline |
+| **Cycle Time** | Average time from Ready → Done |
+| **WIP Limit** | Work-in-progress constraints |
+| **Burndown** | Remaining work over time |
+
+### Health Status Categories
+
+```typescript
+type HealthCategory = 'healthy' | 'warning' | 'critical';
+
+interface HealthStatus {
+  overall: HealthCategory;
+  velocity: HealthCategory;      // Based on completion rate
+  blockers: HealthCategory;      // Blocked issues count
+  staleness: HealthCategory;     // Issues without recent activity
+  coverage: HealthCategory;      // Test coverage metrics
+}
+```
+
+### Webhook Notifications
+
+Configure webhooks for real-time updates:
+
+```bash
+npx claude-flow cto-project webhook add <epic-id> \
+  --url "https://your-endpoint.com/webhook" \
+  --events "progress,health,milestone" \
+  --teammate-mode
+```
+
+---
+
+## Advanced Task Routing
+
+Intelligent task routing determines whether work executes locally, in GitHub Codespaces, or hybrid mode.
+
+### Routing Factors
+
+The router evaluates 12 default factors:
+
+| Factor | Weight | Description |
+|--------|--------|-------------|
+| `requires_gpu` | 100 | GPU-intensive tasks → Codespace |
+| `high_security` | 90 | Security-sensitive → Local |
+| `large_memory` | 80 | >8GB RAM required → Codespace |
+| `long_duration` | 70 | >30min tasks → Codespace |
+| `local_files` | 85 | Requires local filesystem → Local |
+| `network_intensive` | 60 | Heavy network I/O → Codespace |
+| `parallel_safe` | 50 | Can run in parallel → Either |
+| `realtime_feedback` | 75 | Needs immediate output → Local |
+| `ci_integration` | 65 | CI/CD workflows → Codespace |
+| `database_access` | 55 | DB connectivity → Based on setup |
+| `environment_specific` | 70 | Specific env vars → Local |
+| `cost_sensitive` | 40 | Minimize cost → Local |
+
+### Routing Configuration
+
+```typescript
+interface RoutingRule {
+  name: string;
+  condition: (task: TaskProfile) => boolean;
+  score: number;           // -100 (local) to +100 (codespace)
+  priority: number;        // Higher = evaluated first
+  exclusive?: boolean;     // If true, stops further evaluation
+}
+```
+
+### Custom Routing Rules
+
+```bash
+# Add custom routing rule
+npx claude-flow cto-project routing add \
+  --name "ml-training" \
+  --condition "labels.includes('ml')" \
+  --score 95 \
+  --priority 100 \
+  --teammate-mode
+
+# View routing decision for a task
+npx claude-flow cto-project routing evaluate <issue-number> --teammate-mode
+```
+
+### Routing Decision Output
+
+```typescript
+interface RoutingDecision {
+  taskId: string;
+  recommendation: 'local' | 'codespace' | 'hybrid';
+  confidence: number;      // 0-1
+  factors: {
+    name: string;
+    score: number;
+    reason: string;
+  }[];
+  estimatedDuration: number;
+  resourceRequirements: ResourceRequirements;
+}
+```
+
+---
+
+## Review Swarm & Auto-Merge
+
+### Review Swarm Architecture
+
+When a PR enters Review status, a specialized review swarm is spawned with 4 expert agents:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      REVIEW SWARM                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Security   │  │   Quality    │  │ Architecture │      │
+│  │   Reviewer   │  │   Reviewer   │  │   Reviewer   │      │
+│  │    (35%)     │  │    (25%)     │  │    (25%)     │      │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
+│         │                 │                 │               │
+│         └────────────┬────┴─────────────────┘               │
+│                      │                                      │
+│              ┌───────▼───────┐                              │
+│              │     Test      │                              │
+│              │   Reviewer    │                              │
+│              │    (15%)      │                              │
+│              └───────┬───────┘                              │
+│                      │                                      │
+│              ┌───────▼───────┐                              │
+│              │   Consensus   │                              │
+│              │   Aggregator  │                              │
+│              └───────────────┘                              │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Review Workflow (cto-flow-review.yml)
+
+```yaml
+# Triggered when PR is labeled 'ready-for-review'
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  spawn-review-swarm:
+    if: github.event.label.name == 'ready-for-review'
+    steps:
+      - name: Security Review (35% weight)
+        # Checks: vulnerabilities, secrets, injection risks
+
+      - name: Code Quality Review (25% weight)
+        # Checks: patterns, complexity, maintainability
+
+      - name: Architecture Review (25% weight)
+        # Checks: design decisions, epic consistency
+
+      - name: Test Coverage Review (15% weight)
+        # Checks: coverage, edge cases, TDD compliance
+
+      - name: Aggregate Results
+        # Weighted consensus, adds labels
+```
+
+### Auto-Merge Pipeline (cto-flow-merge.yml)
+
+The auto-merge workflow handles automatic merging after approval:
+
+```yaml
+env:
+  AUTO_MERGE_ENABLED: true        # Enable/disable auto-merge
+  MERGE_METHOD: squash            # squash, merge, or rebase
+  REQUIRE_AI_APPROVAL: true       # Require 'ai-approved' label
+  REQUIRE_HUMAN_APPROVAL: false   # Optionally require human review
+  MIN_WAIT_MINUTES: 5             # Minimum wait before merge
+```
+
+### Merge Eligibility Checks
+
+| Check | Description |
+|-------|-------------|
+| Auto-merge enabled | Repository variable check |
+| No merge conflicts | PR must be mergeable |
+| Not already merged | Skip if already merged |
+| AI approval | `ai-approved` label present |
+| No changes requested | No `changes-requested` label |
+| Human approval | Optional human review (if configured) |
+| All checks passed | CI/CD must succeed |
+| Minimum wait time | Prevents premature merges |
+
+### Post-Review Hook
+
+After review completion, the post-review hook:
+
+1. Analyzes review results
+2. Creates follow-up tasks for critical issues
+3. Updates epic memory with findings
+4. Triggers appropriate labels
+
+```typescript
+interface ReviewResult {
+  prNumber: number;
+  approved: boolean;
+  reviewers: ReviewerResult[];
+  criticalIssues: CriticalIssue[];
+  consensusScore: number;  // Weighted average
+  recommendation: 'approve' | 'request_changes' | 'comment';
+}
+```
+
+---
+
+## Worker Modes
+
+CTO-Flow supports three worker execution modes for flexible task processing.
+
+### Local Mode
+
+Tasks execute on the local machine using claude-flow:
+
+```bash
+npx claude-flow cto-project worker start \
+  --mode local \
+  --epic <epic-id> \
+  --teammate-mode
+```
+
+**Best for:**
+- Quick iterations
+- Local file access
+- Real-time feedback
+- Security-sensitive work
+
+### Codespace Mode
+
+Tasks execute in GitHub Codespaces with agentic-flow:
+
+```bash
+npx claude-flow cto-project worker start \
+  --mode codespace \
+  --epic <epic-id> \
+  --codespace-name "my-codespace" \
+  --teammate-mode
+```
+
+**Best for:**
+- Long-running tasks
+- Resource-intensive work
+- CI/CD integration
+- Parallel execution
+
+### Hybrid Mode
+
+Automatic routing based on task characteristics:
+
+```bash
+npx claude-flow cto-project worker start \
+  --mode hybrid \
+  --epic <epic-id> \
+  --teammate-mode
+```
+
+**Behavior:**
+- Uses advanced routing to decide per-task
+- Falls back to local if codespace unavailable
+- Optimizes for cost and performance
+
+### Worker Configuration
+
+```typescript
+interface WorkerConfig {
+  mode: 'local' | 'codespace' | 'hybrid';
+  epicId: string;
+
+  // Local settings
+  local: {
+    maxConcurrent: number;
+    workDir: string;
+  };
+
+  // Codespace settings
+  codespace: {
+    name?: string;
+    machine?: 'basicLinux' | 'standardLinux' | 'premiumLinux';
+    timeout: number;
+    idleTimeout: number;
+  };
+
+  // Hybrid settings
+  hybrid: {
+    preferLocal: boolean;
+    routingStrategy: 'cost' | 'speed' | 'balanced';
+  };
+}
+```
+
+### Worker Lifecycle
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   IDLE      │────▶│  PICKING    │────▶│   WORKING   │
+│  (waiting)  │     │  (selecting)│     │ (executing) │
+└─────────────┘     └─────────────┘     └──────┬──────┘
+       ▲                                        │
+       │            ┌─────────────┐             │
+       └────────────│  COMPLETED  │◀────────────┘
+                    │  (cleanup)  │
+                    └─────────────┘
+```
+
+---
+
+## Hooks System
+
+CTO-Flow hooks provide automation points throughout the workflow lifecycle.
+
+### Available Hooks
+
+| Hook | Trigger | Purpose |
+|------|---------|---------|
+| `post-sparc-hook` | SPARC phase completion | Convert SPARC output to epic tasks |
+| `post-work-hook` | Task completion | Update epic, create PR |
+| `post-review-hook` | Review completion | Process results, create follow-ups |
+
+### Post-SPARC Hook
+
+Converts SPARC planning output into epic issues:
+
+```bash
+npx claude-flow hooks post-sparc \
+  --sparc-output ./sparc-plan.json \
+  --epic <epic-id> \
+  --teammate-mode
+```
+
+**Converts:**
+- Specification → Requirements issues
+- Pseudocode → Algorithm design issues
+- Architecture → ADR issues + design tasks
+- Refinement → Implementation issues
+- Completion → Integration + testing issues
+
+### Post-Work Hook
+
+Handles task completion:
+
+```bash
+npx claude-flow hooks post-work \
+  --task-id <task-id> \
+  --epic <epic-id> \
+  --teammate-mode
+```
+
+**Actions:**
+1. Saves agent context to epic memory
+2. Updates issue status
+3. Creates PR if code changes
+4. Triggers review swarm
+5. Notifies dependent tasks
+
+### Post-Review Hook
+
+Processes review completion:
+
+```bash
+npx claude-flow hooks post-review \
+  --pr <pr-number> \
+  --epic <epic-id> \
+  --teammate-mode
+```
+
+**Actions:**
+1. Aggregates reviewer scores
+2. Applies labels (ai-approved, changes-requested)
+3. Creates follow-up issues for critical findings
+4. Triggers auto-merge if approved
+5. Updates epic progress
+
+### Hook Configuration
+
+```typescript
+interface HookConfig {
+  enabled: boolean;
+  autoRun: boolean;       // Run automatically on trigger
+  timeout: number;        // Max execution time
+  retries: number;        // Retry count on failure
+
+  notifications: {
+    slack?: string;       // Slack webhook URL
+    email?: string[];     // Email recipients
+    github?: boolean;     // GitHub issue comments
+  };
+}
+```
+
+### Custom Hooks
+
+Register custom hooks for project-specific automation:
+
+```typescript
+import { registerHook } from 'claude-flow/cto-flow-agents';
+
+registerHook('custom-deploy', {
+  trigger: 'pr-merged',
+  handler: async (payload) => {
+    // Custom deployment logic
+    await deployToStaging(payload.pr);
+    await notifyTeam(payload.epic);
+  }
+});
+```
+
+---
+
+## GraphQL Reference
+
+### Query Project Items by Status
+
+```bash
+curl -s -H "Authorization: bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -X POST https://api.github.com/graphql \
+  -d '{"query":"query { node(id: \"PROJECT_ID\") { ... on ProjectV2 { items(first: 50) { nodes { id content { ... on Issue { number title body } } fieldValues(first: 10) { nodes { ... on ProjectV2ItemFieldSingleSelectValue { name optionId } } } } } } } }"}'
+```
+
+### Update Status
+
+```bash
+curl -s -H "Authorization: bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -X POST https://api.github.com/graphql \
+  -d '{"query":"mutation { updateProjectV2ItemFieldValue(input: {projectId: \"PROJECT_ID\", itemId: \"ITEM_ID\", fieldId: \"FIELD_ID\", value: {singleSelectOptionId: \"OPTION_ID\"}}) { projectV2Item { id } } }"}'
+```
+
+### Get Epic with Child Issues
+
+```bash
+curl -s -H "Authorization: bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -X POST https://api.github.com/graphql \
+  -d '{"query":"query { repository(owner: \"OWNER\", name: \"REPO\") { issue(number: EPIC_NUMBER) { id title body labels(first: 10) { nodes { name } } timelineItems(itemTypes: [CROSS_REFERENCED_EVENT], first: 50) { nodes { ... on CrossReferencedEvent { source { ... on Issue { number title state } } } } } } } }"}'
+```
+
+### Add Issue to Project
+
+```bash
+curl -s -H "Authorization: bearer $GITHUB_TOKEN" \
+  -H "Content-Type: application/json" \
+  -X POST https://api.github.com/graphql \
+  -d '{"query":"mutation { addProjectV2ItemById(input: {projectId: \"PROJECT_ID\", contentId: \"ISSUE_NODE_ID\"}) { item { id } } }"}'
+```

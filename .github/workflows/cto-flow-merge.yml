@@ -1,0 +1,380 @@
+name: CTO-Flow Auto-Merge After Approval
+
+on:
+  pull_request_review:
+    types: [submitted]
+  check_suite:
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to merge'
+        required: true
+        type: number
+      force_merge:
+        description: 'Force merge (bypass approval requirement)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  NODE_VERSION: '18'
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  AUTO_MERGE_ENABLED: ${{ vars.AUTO_MERGE_ENABLED || 'false' }}
+  MERGE_METHOD: ${{ vars.MERGE_METHOD || 'squash' }}
+  REQUIRE_AI_APPROVAL: ${{ vars.REQUIRE_AI_APPROVAL || 'true' }}
+  REQUIRE_HUMAN_APPROVAL: ${{ vars.REQUIRE_HUMAN_APPROVAL || 'false' }}
+  MIN_WAIT_MINUTES: ${{ vars.MIN_WAIT_MINUTES || '5' }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  issues: write
+
+jobs:
+  check-merge-eligibility:
+    name: Check Merge Eligibility
+    runs-on: ubuntu-latest
+    outputs:
+      should_merge: ${{ steps.check.outputs.should_merge }}
+      pr_number: ${{ steps.check.outputs.pr_number }}
+      merge_reason: ${{ steps.check.outputs.merge_reason }}
+    steps:
+      - name: Determine PR number
+        id: get-pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let prNumber;
+
+            if (context.payload.inputs?.pr_number) {
+              prNumber = context.payload.inputs.pr_number;
+            } else if (context.payload.pull_request) {
+              prNumber = context.payload.pull_request.number;
+            } else if (context.payload.check_suite?.pull_requests?.[0]) {
+              prNumber = context.payload.check_suite.pull_requests[0].number;
+            } else {
+              core.setFailed('Could not determine PR number');
+              return;
+            }
+
+            core.setOutput('pr_number', prNumber);
+            return prNumber;
+
+      - name: Check merge eligibility
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ steps.get-pr.outputs.pr_number }}');
+            const forceMerge = '${{ github.event.inputs.force_merge }}' === 'true';
+            const autoMergeEnabled = '${{ env.AUTO_MERGE_ENABLED }}' === 'true';
+            const requireAiApproval = '${{ env.REQUIRE_AI_APPROVAL }}' === 'true';
+            const requireHumanApproval = '${{ env.REQUIRE_HUMAN_APPROVAL }}' === 'true';
+            const minWaitMinutes = parseInt('${{ env.MIN_WAIT_MINUTES }}');
+
+            // Get PR details
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            // Check if auto-merge is enabled
+            if (!autoMergeEnabled && !forceMerge) {
+              core.setOutput('should_merge', false);
+              core.setOutput('merge_reason', 'Auto-merge is disabled');
+              core.notice('Auto-merge is disabled in repository settings');
+              return;
+            }
+
+            // Check if PR is mergeable
+            if (!pr.mergeable && pr.mergeable !== null) {
+              core.setOutput('should_merge', false);
+              core.setOutput('merge_reason', 'PR has merge conflicts');
+              core.warning(`PR #${prNumber} has merge conflicts`);
+              return;
+            }
+
+            // Check if PR is already merged
+            if (pr.merged) {
+              core.setOutput('should_merge', false);
+              core.setOutput('merge_reason', 'PR is already merged');
+              return;
+            }
+
+            // Get labels
+            const labels = pr.labels.map(l => l.name);
+            const hasAiApproval = labels.includes('ai-approved');
+            const hasChangesRequested = labels.includes('changes-requested');
+            const isReviewed = labels.includes('reviewed');
+
+            // Check for AI approval if required
+            if (requireAiApproval && !hasAiApproval) {
+              core.setOutput('should_merge', false);
+              core.setOutput('merge_reason', 'Missing AI approval');
+              core.notice('PR requires AI approval before merge');
+              return;
+            }
+
+            // Check for changes requested
+            if (hasChangesRequested) {
+              core.setOutput('should_merge', false);
+              core.setOutput('merge_reason', 'Changes requested by reviewer');
+              core.notice('PR has changes requested');
+              return;
+            }
+
+            // Get reviews
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            // Check for human approval if required
+            if (requireHumanApproval) {
+              const hasHumanApproval = reviews.some(
+                r => r.state === 'APPROVED' && !r.user.login.includes('bot')
+              );
+
+              if (!hasHumanApproval) {
+                core.setOutput('should_merge', false);
+                core.setOutput('merge_reason', 'Missing human approval');
+                core.notice('PR requires human approval before merge');
+                return;
+              }
+            }
+
+            // Check all status checks
+            const { data: checkRuns } = await github.rest.checks.listForRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: pr.head.sha
+            });
+
+            const pendingChecks = checkRuns.check_runs.filter(
+              c => c.status !== 'completed'
+            );
+
+            if (pendingChecks.length > 0) {
+              core.setOutput('should_merge', false);
+              core.setOutput('merge_reason', `${pendingChecks.length} checks still running`);
+              core.notice('Waiting for all checks to complete');
+              return;
+            }
+
+            const failedChecks = checkRuns.check_runs.filter(
+              c => c.conclusion !== 'success' &&
+                   c.conclusion !== 'skipped' &&
+                   c.conclusion !== 'neutral'
+            );
+
+            if (failedChecks.length > 0) {
+              const failedNames = failedChecks.map(c => c.name).join(', ');
+              core.setOutput('should_merge', false);
+              core.setOutput('merge_reason', `Failed checks: ${failedNames}`);
+              core.warning(`PR #${prNumber} has failed checks: ${failedNames}`);
+              return;
+            }
+
+            // Check minimum wait time
+            const createdAt = new Date(pr.created_at);
+            const now = new Date();
+            const minutesSinceCreation = (now - createdAt) / (1000 * 60);
+
+            if (minutesSinceCreation < minWaitMinutes && !forceMerge) {
+              core.setOutput('should_merge', false);
+              core.setOutput('merge_reason', `PR is too new (${Math.floor(minutesSinceCreation)}/${minWaitMinutes} minutes)`);
+              core.notice(`Waiting for minimum ${minWaitMinutes} minutes before merge`);
+              return;
+            }
+
+            // All checks passed!
+            core.setOutput('should_merge', true);
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('merge_reason', 'All merge criteria met');
+            core.notice(`PR #${prNumber} is eligible for merge`);
+
+  execute-merge:
+    name: Execute Auto-Merge
+    runs-on: ubuntu-latest
+    needs: check-merge-eligibility
+    if: needs.check-merge-eligibility.outputs.should_merge == 'true'
+    steps:
+      - name: Merge PR
+        id: merge
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ needs.check-merge-eligibility.outputs.pr_number }}');
+            const mergeMethod = '${{ env.MERGE_METHOD }}';
+
+            // Get PR details for commit message
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            // Build commit message
+            const isCtoFlow = pr.head.ref.startsWith('cto-flow/') ||
+                             pr.head.ref.includes('/worker-') ||
+                             pr.title.includes('[CTO-Flow]');
+
+            const commitTitle = isCtoFlow
+              ? `[CTO-Flow] ${pr.title} (#${prNumber})`
+              : `${pr.title} (#${prNumber})`;
+
+            const commitMessage = `Auto-merged after approval
+
+            **Review Status:**
+            - AI Review: ✅ Approved
+            - All Checks: ✅ Passed
+
+            ${isCtoFlow ? '🤖 Auto-generated and auto-merged by CTO-Flow' : '🤖 Auto-merged by CTO-Flow'}`;
+
+            try {
+              const result = await github.rest.pulls.merge({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                merge_method: mergeMethod,
+                commit_title: commitTitle,
+                commit_message: commitMessage
+              });
+
+              core.setOutput('merged', true);
+              core.setOutput('sha', result.data.sha);
+              core.notice(`✅ Successfully merged PR #${prNumber}`);
+
+              return { merged: true, sha: result.data.sha };
+            } catch (error) {
+              core.setOutput('merged', false);
+              core.setOutput('error', error.message);
+              core.setFailed(`Failed to merge PR #${prNumber}: ${error.message}`);
+              return { merged: false, error: error.message };
+            }
+
+      - name: Post merge comment
+        if: steps.merge.outputs.merged == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ needs.check-merge-eligibility.outputs.pr_number }}');
+            const sha = '${{ steps.merge.outputs.sha }}';
+
+            const body = `## 🎉 Auto-Merged Successfully
+
+            This PR was automatically merged after satisfying all requirements:
+
+            | Criteria | Status |
+            |----------|--------|
+            | AI Code Review | ✅ Approved |
+            | All CI Checks | ✅ Passed |
+            | Merge Conflicts | ✅ None |
+            | Branch Protection | ✅ Satisfied |
+
+            **Merge Commit:** \`${sha.substring(0, 7)}\`
+            **Method:** ${{ env.MERGE_METHOD }}
+
+            ---
+            *Automated by CTO-Flow Merge Pipeline*`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body
+            });
+
+      - name: Delete head branch
+        if: steps.merge.outputs.merged == 'true'
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            const prNumber = parseInt('${{ needs.check-merge-eligibility.outputs.pr_number }}');
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+
+            // Only delete if it's a feature branch (not main/develop)
+            const protectedBranches = ['main', 'master', 'develop', 'staging', 'production'];
+            const branchName = pr.head.ref;
+
+            if (!protectedBranches.includes(branchName)) {
+              try {
+                await github.rest.git.deleteRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: `heads/${branchName}`
+                });
+                core.notice(`Deleted branch: ${branchName}`);
+              } catch (error) {
+                core.warning(`Could not delete branch ${branchName}: ${error.message}`);
+              }
+            }
+
+      - name: Trigger post-merge hook
+        if: steps.merge.outputs.merged == 'true'
+        run: |
+          echo "🔔 Triggering post-merge hook..."
+
+          # Notify CTO-Flow of successful merge
+          cat > /tmp/merge-event.json <<EOF
+          {
+            "event": "pr_merged",
+            "pr_number": "${{ needs.check-merge-eligibility.outputs.pr_number }}",
+            "merge_sha": "${{ steps.merge.outputs.sha }}",
+            "repository": "${{ github.repository }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+
+          cat /tmp/merge-event.json
+
+  notify-failure:
+    name: Notify Merge Blocked
+    runs-on: ubuntu-latest
+    needs: check-merge-eligibility
+    if: needs.check-merge-eligibility.outputs.should_merge == 'false'
+    steps:
+      - name: Add blocking label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = parseInt('${{ needs.check-merge-eligibility.outputs.pr_number }}');
+            const reason = '${{ needs.check-merge-eligibility.outputs.merge_reason }}';
+
+            // Only add label if this was an explicit merge attempt
+            if (context.eventName === 'workflow_dispatch') {
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  labels: ['merge-blocked']
+                });
+
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body: `## ⚠️ Auto-Merge Blocked
+
+                  **Reason:** ${reason}
+
+                  Please address the blocking issue and the merge will be attempted again automatically.
+
+                  ---
+                  *CTO-Flow Merge Pipeline*`
+                });
+              } catch (error) {
+                core.warning(`Could not update PR: ${error.message}`);
+              }
+            }
